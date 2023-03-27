@@ -240,9 +240,10 @@ function ENT:InitSubob()
 			parentent:Spawn() 
 			if BREED.Objects[parentent.ob_name].mode == "WHEEL" and BREED.WheelSettings[parentent.ob_name] then 
 				local length = tonumber(BREED.WheelSettings[parentent.ob_name].travel)*-scalar 
-				length = length * 0.4 
+				length = length 
 				local suspension = ents.Create("prop_physics") 
-				suspension:SetPos(parentent:GetPos()) 
+				-- suspension:SetPos(parentent:GetPos()) 
+				suspension:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
 				suspension:SetModel("models/blackout.mdl") 
 				suspension:PhysicsInitBox(suspension:GetModelBounds()) 
 				suspension:Spawn() 
@@ -255,8 +256,10 @@ function ENT:InitSubob()
 				constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) 
 				parentent:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
 				-- constraint.Muscle(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-(length*-scalar)),0,0,30,0,0,0,0,"cable/rope",color_white) 
-				constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
-				constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
+				-- constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
+				-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
+				-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
+				constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1)
 			else 
 				constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
 			end 
@@ -446,7 +449,7 @@ function ENT:InitMoveType()
 		local mass = tonumber(BREED.Objects[self.ob_name].mass_kg) 
 		mass = (mass and mass > 1 and mass) or BREED.Objects[self.ob_name].thrust_kg 
 		-- if mode == "WHEEL" then mass = 5000 end 
-		if mode != "WHEEL" then phys:SetMass(mass) end 
+		-- if mode != "WHEEL" then phys:SetMass(mass) end 
 	end 
 end 
 
@@ -562,27 +565,45 @@ end
 function ENT:Mercury_RotateThink() 
 	if CLIENT then return end 
 	local obmode = BREED.Objects[self:GetOBName()].mode 
+	local physobj = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
 	local inputsettings = BREED.InputSettings[self:GetOBName()] 
 	if (obmode == "ROTATE" or obmode == "ROTATE_THROTTLE" or obmode == "ROTATE_MANNED" or obmode == "TURRET") and inputsettings then 
 		for rotMethod, rotTbl in pairs(inputsettings) do -- "ANLG_LR" = "Y" 
 			for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
 				local curAngles = self:GetLocalAngles() 
+				if physobj then 
+					if IsValid(self:GetSubEnt()) then 
+						_,curAngles = WorldToLocal(vector_origin,self:GetSubEnt():GetAngles(),vector_origin,physobj:GetAngles()) 
+					else 
+						_,curAngles = WorldToLocal(vector_origin,self.Mercury_angSpawnAngles,vector_origin,physobj:GetAngles()) 
+					end 
+				end 
 				-- local axis = (rotAxis == "X" and Vector(0,1,0)) or (rotAxis == "Y" and Vector(0,0,1)) or rotAxis == "Z" and Vector(1,0,0) 
 				local axis = (rotAxis == "X" and Vector(0,1,0)) or (rotAxis == "Y" and Vector(0,0,1)) or rotAxis == "Z" and Vector(1,0,0) 
 				local maxrotspeed = rotAxisTbl["rate"] 
 				maxrotspeed = maxrotspeed * 0.1 
 				if self.Mercury_bRotationBounce == true then axis = -axis end 
 				curAngles:RotateAroundAxis(axis,maxrotspeed*FrameTime()) 
-				self:SetLocalAngles(curAngles) 
+				
+				if physobj then 
+					if IsValid(self:GetSubEnt()) then 
+						_,curAngles = LocalToWorld(vector_origin,curAngles,vector_origin,self:GetSubEnt():GetAngles()) 
+					else 
+						_,curAngles = LocalToWorld(vector_origin,curAngles,vector_origin,self.Mercury_angSpawnAngles) 
+					end 
+					physobj:SetAngles(curAngles) 
+				else 
+					self:SetLocalAngles(curAngles) 
+				end 
 				-- rotAxis = (rotAxis == "X" and "y") or (rotAxis == "Y" and "z") or rotAxis == "Z" and "x" 
 				-- rotAxis = (rotAxis == "X" and "x") or (rotAxis == "Y" and "y") or rotAxis == "Z" and "z" 
 				rotAxis = string.lower(rotAxis) 
-				print("object", self:GetOBName(), curAngles[rotAxis]) 
-				if rotAxisTbl["minrot"] != "X" and curAngles[rotAxis] < tonumber(rotAxisTbl["minrot"]) then 
+				-- print("object", self:GetOBName(), curAngles[rotAxis]) 
+				if rotAxisTbl["minrot"] != "X" and curAngles[rotAxis] < -tonumber(rotAxisTbl["minrot"]) then 
 					self.Mercury_bRotationBounce = false 
 				end 
 				
-				if rotAxisTbl["maxrot"] != "X" and curAngles[rotAxis] > tonumber(rotAxisTbl["maxrot"]) then 
+				if rotAxisTbl["maxrot"] != "X" and curAngles[rotAxis] > -tonumber(rotAxisTbl["maxrot"]) then 
 					self.Mercury_bRotationBounce = true 
 				end 
 				
@@ -621,12 +642,21 @@ function ENT:Think()
 	
 	if BREED.Objects[self:GetOBName()].mode == "JET" then -- i am a jet 
 		local engineThrust = self:GetThrustRate() -- parented to an aircraft 
-		local targetThrust = self:GetOwner():GetThrustRate() 
+		local targetThrust = IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() or engineThrust 
 		local increment = math.Approach(engineThrust,targetThrust,0.5) 
 		self:SetThrustRate(increment) 
 		local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
 		thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
 		if self.SetForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
+	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) then 
+		local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
+		-- Make the wheel spin
+		local impulse = Vector(0,0,1) -- Direction of the impulse force 
+		local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
+		local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
+		local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
+		self:GetPhysicsObject():ApplyTorqueCenter(torquelocal) 
+		print("applied torque to",self,"impulse:",impulse,"force:",force,"position:",position,torque,torquelocal) 
 	end 
 	
 	if self:Mercury_CanRotate() then 

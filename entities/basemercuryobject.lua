@@ -173,6 +173,11 @@ function ENT:InitModel()
 end 
 --]] 
 
+function ENT:Mercury_TranslateMeshIndex(meshindex) 
+	if meshindex == 110 then return 142 end 
+	return meshindex 
+end 
+
 function ENT:InitModel() 
 	print("OBJECT NAME:", self.ob_name) 
 	local meshindex = BREED.Objects[self.ob_name].mesh 
@@ -188,6 +193,7 @@ function ENT:InitModel()
 	end 
 	--]] 
 	meshindex = GetProperIndex(meshindex) 
+	-- meshindex = self:Mercury_TranslateMeshIndex(meshindex) 
 	local modelname = BREED.Models[meshindex] 
 	if !modelname then MsgC(color_white,"Removed entity with meshindex "..BREED.Objects[self.ob_name].mesh.."\n") SafeRemoveEntity(self) return end 
 	local modelpath = Model("models/breed/"..BREED.Models[meshindex]) 
@@ -282,7 +288,8 @@ function ENT:InitMoveType_MultiConvexVehicle()
 	
 	self.breed_collisionmesh = {} 
 	self.breed_collisionmesh.verticies = { } 
-	for k,v in pairs(util.GetModelMeshes(self:GetModel())) do 
+	local model = self:GetModel() 
+	for k,v in pairs(util.GetModelMeshes(model)) do 
 		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
 	end 
 	

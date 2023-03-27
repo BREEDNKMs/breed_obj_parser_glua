@@ -211,6 +211,14 @@ function ENT:Mercury_CanRotate()
 	return mode == "TURRET" or mode == "ROTATE" or mode == "JET" or mode == "ROTATE_THROTTLE" or mode == "WHEEL" or mode == "ROTATE_MANNED", mode 
 end 
 
+function ENT:Mercury_FixInputLimit(inputdata) 
+	if !inputdata then return nil end 
+	local newdata = table.Copy(inputdata) 
+	if newdata.minrot == "X" then newdata.minrot = 360 end 
+	if newdata.maxrot == "X" then newdata.maxrot = 360 end 
+	return newdata 
+end 
+
 function ENT:InitSubob() 
 	local subobtbl = BREED.Subob[self.ob_name] 
 	if subobtbl and subobtbl[1] then 
@@ -248,8 +256,8 @@ function ENT:InitSubob()
 				suspension:PhysicsInitBox(suspension:GetModelBounds()) 
 				suspension:Spawn() 
 				suspension:PhysicsInitBox(suspension:GetModelBounds()) 
-				parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10)
-				suspension:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10)
+				-- parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+				suspension:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
 				suspension:SetNotSolid(1) 
 				suspension:SetCollisionGroup(COLLISION_GROUP_WORLD) 
 				constraint.Weld(self,suspension,0,0,0,true,false) 
@@ -260,7 +268,59 @@ function ENT:InitSubob()
 				-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
 				-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
 				constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1)
-			else 
+			elseif parentent:Mercury_CanRotate() and parentent:HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
+				-- get turn axes 
+				local X,Y,Z 
+				for rotMethod, rotTbl in pairs(BREED.InputSettings[parentent.ob_name]) do -- "ANLG_LR" = {"Y", "Z"}	
+					for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
+						X = rotAxis == "X" and rotAxisTbl or nil 
+						Y = rotAxis == "Y" and rotAxisTbl or nil 
+						Z = rotAxis == "Z" and rotAxisTbl or nil 
+					end 
+				end 
+				
+				X = self:Mercury_FixInputLimit(X) 
+				Y = self:Mercury_FixInputLimit(Y) 
+				Z = self:Mercury_FixInputLimit(Z) 
+				
+				if X or Y or Z then 
+					local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, parentent:GetUp()+parentent:GetForward()+parentent:GetRight(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
+					if X then 
+						print(parentent, "will use X") 
+						xmin = -tonumber(X.minrot) 
+						xmax = -tonumber(X.maxrot) 
+					end 
+					if Y then 
+						print(parentent, "will use Y") 
+						ymin = -tonumber(Y.minrot) 
+						ymax = -tonumber(Y.maxrot) 
+					end 
+					if Z then 
+						print(parentent, "will use Z") 
+						zmin = -tonumber(Z.minrot) 
+						zmax = -tonumber(Z.maxrot) 
+					end 
+					local joint = ents.Create("prop_physics") 
+					if IsValid(joint) then 
+						joint:SetModel("models/blackout.mdl") 
+						joint:SetPos(parentent:GetPos()) 
+						joint:PhysicsInitSphere(joint:BoundingRadius()) 
+						joint:SetSolid(SOLID_NONE) 
+						joint:SetNotSolid(1) 
+						joint:Spawn() 
+						joint:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+						joint:SetNotSolid(1) 
+						joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+						parentent.Mercury_entJoint = joint 
+						constraint.Weld(self,joint,0,0,0,true,false) 
+						constraint.NoCollide(self,joint,0,0) 
+					end 
+					constraint.AdvBallsocket(joint,parentent,bone1,bone2,LPos1,LPos2,forcelimit,torquelimit,xmin,ymin,zmin,xmax,ymax,zmax,xfric,yfric,zfric,onlyrotation,nocollide) 
+				else 
+					constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
+				end 
+				
+			else -- STATIC OBJECTS 
 				constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
 			end 
 		end 
@@ -448,8 +508,7 @@ function ENT:InitMoveType()
 	if phys and IsValid(phys) then 
 		local mass = tonumber(BREED.Objects[self.ob_name].mass_kg) 
 		mass = (mass and mass > 1 and mass) or BREED.Objects[self.ob_name].thrust_kg 
-		-- if mode == "WHEEL" then mass = 5000 end 
-		-- if mode != "WHEEL" then phys:SetMass(mass) end 
+		phys:SetMass(mass) 
 	end 
 end 
 
@@ -568,7 +627,7 @@ function ENT:Mercury_RotateThink()
 	local physobj = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
 	local inputsettings = BREED.InputSettings[self:GetOBName()] 
 	if (obmode == "ROTATE" or obmode == "ROTATE_THROTTLE" or obmode == "ROTATE_MANNED" or obmode == "TURRET") and inputsettings then 
-		for rotMethod, rotTbl in pairs(inputsettings) do -- "ANLG_LR" = "Y" 
+		for rotMethod, rotTbl in pairs(inputsettings) do -- -- "ANLG_LR" = {"Y", "Z"}	
 			for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
 				local curAngles = self:GetLocalAngles() 
 				if physobj then 
@@ -591,7 +650,7 @@ function ENT:Mercury_RotateThink()
 					else 
 						_,curAngles = LocalToWorld(vector_origin,curAngles,vector_origin,self.Mercury_angSpawnAngles) 
 					end 
-					physobj:SetAngles(curAngles) 
+					-- physobj:SetAngles(curAngles) 
 				else 
 					self:SetLocalAngles(curAngles) 
 				end 
@@ -648,14 +707,14 @@ function ENT:Think()
 		local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
 		thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
 		if self.SetForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
-	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) then 
+	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 then 
 		local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
 		-- Make the wheel spin
-		local impulse = Vector(0,0,1) -- Direction of the impulse force 
+		local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
 		local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
 		local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
 		local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
-		self:GetPhysicsObject():ApplyTorqueCenter(torquelocal) 
+		self:GetPhysicsObject():ApplyTorqueCenter(torque) 
 		print("applied torque to",self,"impulse:",impulse,"force:",force,"position:",position,torque,torquelocal) 
 	end 
 	

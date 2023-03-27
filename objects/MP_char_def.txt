@@ -1,0 +1,311 @@
+#VEHICLE DEFINITIONS FILE																																																																																																																																																																																																																																																															
+
+USC : DEFINITIONS																																																																																																																																																																																																																																																															
+#REM	DEF	OBNAME	MODE	MESH	HEAD_ICON	COCKPIT	ICON	COLLISN	DETECT	DRANGE	CAMERA	SHADOW	MASS KG	THRUST KG	DAMAGE	MAXVEL	ACCEL	SPACE	SURF	TILT_Z	CAN CARRY	VIEW OB	TARGET OB	SOUND Db	FIREMISSION AWARE	TARGETTABLE																																																																																																																																																																																																																																					
+																																																																																																																																																																																																																																																															
+	#DEF	GRUNT_MP	BIPED	5	-1	0	0	POLY	NONE	0	2	1	120	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	HVY_GRUNT_MP	BIPED	5	-1	0	0	POLY	NONE	0	2	1	120	0	250	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	CARLA_MP	BIPED	5	-1	0	0	POLY	NONE	0	2	1	100	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	GUNNY_MP	BIPED	5	-1	0	0	POLY	NONE	0	2	1	150	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	SNIPER_MP	BIPED	5	-1	0	0	POLY	NONE	0	2	1	150	0	160	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	MEDIC_MP	BIPED	5	-1	0	1	POLY	NONE	0	2	1	110	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	ENGINEER_MP	BIPED	5	-1	0	2	POLY	NONE	0	2	1	140	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	BODYSUIT_MP	BIPED	5	-1	0	8	POLY	NONE	0	2	1	1000	0	1000	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	BREEDMP_SOLDIER	BIPED	5	-1	0	-1	POLY	NONE	0	2	1	4000	0	200	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+	#DEF	BREEDMP2_SOLDIER	BIPED	5	-1	0	-1	POLY	NONE	0	2	1	4000	0	250	20	20	1	1	0	0	0	0	0	0	1																																																																																																																																																																																																																																					
+USC : DAMAGE MESH																																																																																																																																																																																																																																																															
+	DAMAGE_MESH	VEHICLE	MESH																								
+																											
+																											
+CHARACTERS																											
+#REM	CHARACTER	VEHICLE	SKILL	HEAD_ICON	SPEED	ACCURACY	MEDI_PAK	ENG_PAK	VOICE INDEX	VOICE PITCH	CAN_PILOT	WEAPON															
+	#CHARACTER	GRUNT_MP	GRUNT	0	1.2	-1	3	0	0	1	1	PUNCH_MP															
+	#CHARACTER	MEDIC_MP	MEDIC	2	1.1	0	5	0	0	1	1	PUNCH_MP															
+	#CHARACTER	SNIPER_MP	SNIPER	1	1.4	0	3	0	2	1	1	PUNCH_MP															
+	#CHARACTER	HVY_GRUNT_MP	GRUNT	3	1	0	3	0	3	1	1	PUNCH_MP															
+	#CHARACTER	ENGINEER_MP	ENGINEER	4	1.1	0	3	5	4	1	1	PUNCH_MP															
+	#CHARACTER	CARLA_MP	GRUNT	9	1.2	-1	3	0	8	1	1	PUNCH_MP															
+	#CHARACTER	GUNNY_MP	GRUNT	5	1.2	-2	3	0	0	1	1	PUNCH_MP															
+	#CHARACTER	BODYSUIT_MP	GRUNT	8	0.8	0	0	0	7	1	0	PUNCH_MP															
+																											
+	#CHARACTER	BREEDMP_SOLDIER	GRUNT	10	1.2	0	3	0	1	1	1	PUNCH_MP															
+	#CHARACTER	BREEDMP2_SOLDIER	GRUNT	11	1.1	-1	3	0	1	1	1	PUNCH_MP															
+AMMO LIMIT								
+#REM	AMMO_LIMIT	TAG	WEAPON GROUP	MAX AMMO				
+	#AMMO_LIMIT	GRUNT_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	MEDIC_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	SNIPER_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	HVY_GRUNT_MP	R340 ASSAULT RIFLE	174				
+	#AMMO_LIMIT	ENGINEER_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	CARLA_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	GUNNY_MP	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	BREEDMP_SOLDIER	R340 ASSAULT RIFLE	144				
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	R340 ASSAULT RIFLE	174				
+	#AMMO_LIMIT	BODYSUIT_MP	R340 ASSAULT RIFLE	214				
+								
+	#AMMO_LIMIT	GRUNT_MP	Z650	180				
+	#AMMO_LIMIT	MEDIC_MP	Z650	180				
+	#AMMO_LIMIT	SNIPER_MP	Z650	180				
+	#AMMO_LIMIT	HVY_GRUNT_MP	Z650	180		
+	#AMMO_LIMIT	ENGINEER_MP	Z650	180		
+	#AMMO_LIMIT	CARLA_MP	Z650	180		
+	#AMMO_LIMIT	GUNNY_MP	Z650	180		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	Z650	180		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	Z650	180		
+	#AMMO_LIMIT	BODYSUIT_MP	Z650	250		
+						
+	#AMMO_LIMIT	GRUNT_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	MEDIC_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	SNIPER_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	HVY_GRUNT_MP	ASSAULT GRENADE	8		
+	#AMMO_LIMIT	ENGINEER_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	CARLA_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	GUNNY_MP	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	ASSAULT GRENADE	4		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	ASSAULT GRENADE	8		
+	#AMMO_LIMIT	BODYSUIT_MP	ASSAULT GRENADE	12		
+						
+	#AMMO_LIMIT	GRUNT_MP	SUREKILL L220	10		
+	#AMMO_LIMIT	MEDIC_MP	SUREKILL L220	10		
+	#AMMO_LIMIT	SNIPER_MP	SUREKILL L220	15		
+	#AMMO_LIMIT	HVY_GRUNT_MP	SUREKILL L220	12		
+	#AMMO_LIMIT	ENGINEER_MP	SUREKILL L220	10		
+	#AMMO_LIMIT	CARLA_MP	SUREKILL L220	10		
+	#AMMO_LIMIT	GUNNY_MP	SUREKILL L220	10		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	SUREKILL L220	10		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	SUREKILL L220	12		
+	#AMMO_LIMIT	BODYSUIT_MP	SUREKILL L220	12		
+						
+	#AMMO_LIMIT	GRUNT_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	MEDIC_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	SNIPER_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	HVY_GRUNT_MP	BUTCHER 44K	24		
+	#AMMO_LIMIT	ENGINEER_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	CARLA_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	GUNNY_MP	BUTCHER 44K	19		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	BUTCHER 44K	19		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	BUTCHER 44K	24		
+	#AMMO_LIMIT	BODYSUIT_MP	BUTCHER 44K	29		
+						
+	#AMMO_LIMIT	GRUNT_MP	breed_plasma	200		
+	#AMMO_LIMIT	MEDIC_MP	breed_plasma	200		
+	#AMMO_LIMIT	SNIPER_MP	breed_plasma	200		
+	#AMMO_LIMIT	HVY_GRUNT_MP	breed_plasma	250		
+	#AMMO_LIMIT	ENGINEER_MP	breed_plasma	200		
+	#AMMO_LIMIT	CARLA_MP	breed_plasma	200		
+	#AMMO_LIMIT	GUNNY_MP	breed_plasma	200		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	breed_plasma	200		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	breed_plasma	250		
+	#AMMO_LIMIT	BODYSUIT_MP	breed_plasma	300		
+						
+	#AMMO_LIMIT	GRUNT_MP	ROCKET	3		
+	#AMMO_LIMIT	MEDIC_MP	ROCKET	3		
+	#AMMO_LIMIT	SNIPER_MP	ROCKET	3		
+	#AMMO_LIMIT	HVY_GRUNT_MP	ROCKET	5		
+	#AMMO_LIMIT	ENGINEER_MP	ROCKET	3		
+	#AMMO_LIMIT	CARLA_MP	ROCKET	3		
+	#AMMO_LIMIT	GUNNY_MP	ROCKET	3		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	ROCKET	3		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	ROCKET	5		
+	#AMMO_LIMIT	BODYSUIT_MP	ROCKET	9		
+						
+	#AMMO_LIMIT	GRUNT_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	MEDIC_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	SNIPER_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	HVY_GRUNT_MP	EKTO BOLT	24		
+	#AMMO_LIMIT	ENGINEER_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	CARLA_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	GUNNY_MP	EKTO BOLT	19		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	EKTO BOLT	19		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	EKTO BOLT	24		
+	#AMMO_LIMIT	BODYSUIT_MP	EKTO BOLT	29		
+						
+	#AMMO_LIMIT	GRUNT_MP	VIOLATOR VX6	10		
+	#AMMO_LIMIT	MEDIC_MP	VIOLATOR VX6	10		
+	#AMMO_LIMIT	SNIPER_MP	VIOLATOR VX6	15		
+	#AMMO_LIMIT	HVY_GRUNT_MP	VIOLATOR VX6	12		
+	#AMMO_LIMIT	ENGINEER_MP	VIOLATOR VX6	10		
+	#AMMO_LIMIT	CARLA_MP	VIOLATOR VX6	10		
+	#AMMO_LIMIT	GUNNY_MP	VIOLATOR VX6	10		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	VIOLATOR VX6	10		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	VIOLATOR VX6	12		
+	#AMMO_LIMIT	BODYSUIT_MP	VIOLATOR VX6	12		
+						
+	#AMMO_LIMIT	GRUNT_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	MEDIC_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	SNIPER_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	HVY_GRUNT_MP	INTRUDER Z111	5		
+	#AMMO_LIMIT	ENGINEER_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	CARLA_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	GUNNY_MP	INTRUDER Z111	3		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	INTRUDER Z111	3		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	INTRUDER Z111	5		
+	#AMMO_LIMIT	BODYSUIT_MP	INTRUDER Z111	9		
+						
+	#AMMO_LIMIT	GRUNT_MP	usc_flamer	500		
+	#AMMO_LIMIT	MEDIC_MP	usc_flamer	500		
+	#AMMO_LIMIT	SNIPER_MP	usc_flamer	500		
+	#AMMO_LIMIT	HVY_GRUNT_MP	usc_flamer	600		
+	#AMMO_LIMIT	ENGINEER_MP	usc_flamer	500		
+	#AMMO_LIMIT	CARLA_MP	usc_flamer	500		
+	#AMMO_LIMIT	GUNNY_MP	usc_flamer	500		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	usc_flamer	500		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	usc_flamer	600		
+	#AMMO_LIMIT	BODYSUIT_MP	usc_flamer	750		
+						
+	#AMMO_LIMIT	GRUNT_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	MEDIC_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	SNIPER_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	HVY_GRUNT_MP	DISCHARGER GL2	150		
+	#AMMO_LIMIT	ENGINEER_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	CARLA_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	GUNNY_MP	DISCHARGER GL2	100		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	DISCHARGER GL2	100		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	DISCHARGER GL2	150		
+	#AMMO_LIMIT	BODYSUIT_MP	DISCHARGER GL2	200		
+						
+	#AMMO_LIMIT	GRUNT_MP	usc_smg	75		
+	#AMMO_LIMIT	MEDIC_MP	usc_smg	75		
+	#AMMO_LIMIT	SNIPER_MP	usc_smg	75		
+	#AMMO_LIMIT	HVY_GRUNT_MP	usc_smg	125		
+	#AMMO_LIMIT	ENGINEER_MP	usc_smg	75		
+	#AMMO_LIMIT	CARLA_MP	usc_smg	75		
+	#AMMO_LIMIT	GUNNY_MP	usc_smg	75		
+	#AMMO_LIMIT	BREEDMP_SOLDIER	usc_smg	75		
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	usc_smg	125		
+	#AMMO_LIMIT	BODYSUIT_MP	usc_smg	150		
+																										
+	#AMMO_LIMIT	GRUNT_MP	breed_mortar	10																						
+	#AMMO_LIMIT	MEDIC_MP	breed_mortar	10																						
+	#AMMO_LIMIT	SNIPER_MP	breed_mortar	10																						
+	#AMMO_LIMIT	HVY_GRUNT_MP	breed_mortar	13																						
+	#AMMO_LIMIT	ENGINEER_MP	breed_mortar	10																						
+	#AMMO_LIMIT	CARLA_MP	breed_mortar	10																						
+	#AMMO_LIMIT	GUNNY_MP	breed_mortar	10																						
+	#AMMO_LIMIT	BREEDMP_SOLDIER	breed_mortar	10																						
+	#AMMO_LIMIT	BREEDMP2_SOLDIER	breed_mortar	13																						
+	#AMMO_LIMIT	BODYSUIT_MP	breed_mortar	15																						
+																										
+DAMAGE_SCALAR																										
+#REM	DAMAGE	VEHICLE	VALUE																							
+																										
+EXPLOSIVE FORCE																										
+#REM	EXPLOSIVE_FORCE	VEHICLE	FORCE	RADIUS																						
+																										
+USC : SUBOB																										
+#REM	SUBOB	VEHICLE	SUBOB	POS			ANGLE			TASK																
+	#SUBOB	GRUNT_MP	GRUNT_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	HVY_GRUNT_MP	HVY_GRUNT_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	CARLA_MP	CARLA_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	GUNNY_MP	GUNNY_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	SNIPER_MP	SNIPER_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	MEDIC_MP	MEDIC_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	ENGINEER_MP	ENGINEER_PELVIS	0	80	0	0	0	0	SUB																
+	#SUBOB	BODYSUIT_MP	BODYSUIT_PELVIS	0	70	0	0	0	0	 SUB																
+	#SUBOB	BREEDMP_SOLDIER	BREED_PELVIS	0	85	0	0	0	0	SUB																
+	#SUBOB	BREEDMP2_SOLDIER	BREED2_PELVIS	0	85	0	0	0	0	SUB																
+
+USC : VEHICLE ENTER_ICONS																										
+#REM	ENTER_ICON	VEHICLE	ICON INDEX																							
+																										
+USC : HIT ANIM INDEX																										
+#REM	HIT_ANIM	VEHICLE	STOOD ANIM	CROUCHED ANIM																						
+																										
+USC : DAMAGE MESH																										
+#REM	DAMAGE_MESH	VEHICLE	MESH																							
+																										
+USC : TAG GENERATE																										
+#REM	TAG_GENERATE	VEHICLE																								
+
+USC : SQUAD FOLLOW																										
+#REM	SQUAD_FOLLOW	VEHICLE	TRUE(1) FALSE(0)	RADIUS																						
+
+USC : PILOT																										
+#REM	PILOT	VEHICLE	PILOT OBJECT	POS				POSE	EJECT X	Y	Z	BLAST DAMAGE	0-lying	1-sitting	2-standing											
+
+USC : LOADPOS																										
+#REM	LOADPOS	VEHICLE	WIDTH	LENGTH	HEIGHT	POS																				
+
+USC : INTERIOR SPACE																										
+#REM	INTERIOR SPACE	VEHICLE		MIN X	MIN Y	MIN Z	MAX X	MAX Y	MAX Z																	
+
+USC : PANEL																										
+#REM	PANEL	VEHICLE		X	Y	Z	WIDTH	HEIGHT	X ANGLE	Y ANGLE	FONT W	FONT H	COLOR	TYPE	TEXT											
+
+USC : SWITCH																										
+#REM	SWITCH	VEHICLE	TYPE	STATE	ICON	POS X	POS Y	POS Z	RADIUS	VAR																
+
+USC : STATE																										
+#REM	STATE	VEHICLE	STATE	TRUEANGLE				FALSE ANGLE			OFFSET															
+																										
+USC : WHEEL																										
+#REM	WHEEL	VEHICLE		DRIVEN	STEERED	ROTATE	TRAVEL cm	SMOKE	FORCE X OFF	FORCE Z OFF																
+
+USC : INPUT																										
+#REM	INPUT	VEHICLE	AXIS	INPUT	MAX	MIN	RATE																			
+	#INPUT	GRUNT_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	HVY_GRUNT_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	CARLA_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	GUNNY_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	SNIPER_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	MEDIC_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	ENGINEER_MP	Y	ANLG_LR	X	X	1000																			
+	#INPUT	BREEDMP_SOLDIER	Y	ANLG_LR	X	X	1000																			
+	#INPUT	BREEDMP2_SOLDIER	Y	ANLG_LR	X	X	1000																			
+	#INPUT	BODYSUIT_MP	Y	ANLG_LR	X	X	1000																			
+
+USC : ANIM																										
+#REM	ANIM	VEHICLE	ANIM	SUBINDEX	UPPER BODY																					
+	#ANIM	GRUNT_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	HVY_GRUNT_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	CARLA_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	GUNNY_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	SNIPER_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	MEDIC_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	ENGINEER_MP	Grunt_Default_Movement	19	0																					
+	#ANIM	BODYSUIT_MP	Bodysuit_Default_Movement	19	0																					
+	#ANIM	BREEDMP_SOLDIER	Breed_Default_Movement	19	0																					
+	#ANIM	BREEDMP2_SOLDIER	Breed_Default_Movement	19	0																					
+
+USC : LNCHR																										
+#REM	LNCHR	VEHICLE	TYPE	VEHICLE	OB	POS	OB	ANGLE	RELEASE	VELOCITY																
+
+USC : APPRCH																										
+#REM	APPRCH	VEHICLE	POS																							
+
+USC : CAMERA																										
+#REM	CAMERA	VEHICLE	POS			ANGLE																				
+
+USC : VPOINT																										
+#REM	VIEWPOINT	VEHICLE	POSITION																							
+
+	#VPOINT	SNIPER_MP	0	125	0																					
+	#VPOINT	GUNNY_MP	0	125	0																					
+	#VPOINT	CARLA_MP	0	125	0																					
+	#VPOINT	BODYSUIT_MP	0	150	0																					
+	#VPOINT	MEDIC_MP	0	125	0																					
+	#VPOINT	ENGINEER_MP	0	125	0																					
+
+USC : LIGHTS																										
+#REM	SPRITE	VEHICLE	MODE	COLOR	POSITION			RADIUS																		
+
+USC : SPRT																										
+#REM	SPRITE	VEHICLE	TEXTURE	COLOR	POSITION	RADIUS																				
+
+USC : EMIT																										
+#REM	EMITTER	VEHICLE	MODE	LIFE	TEXTURE	PROBABL	RADIUS	BLOOM	COL1	COL2	POSITION			VELOCITY												
+
+USC : WEAPON PARAMETERS																										
+#REM	WEAPON_PARAMS	VEHICLE	PRIMARY RELOAD ANIM	RELOAD ANIM2	ZOOM VALUE																					
+
+USC : MZL																										
+#REM	MUZZLE	VEHICLE	SUBTYPE	POSITION																						
+
+
+USC : AMMO																										
+#REM	ARM	VEHICLE	WEAPON	ROUNDS	MUZZLETYPE	SECONDARY WEAPON	SECONDARY ROUNDS																			
+																										
+USC : ARM																										
+#REM	ARM	VEHICLE	WEAPON																							
+
+#FACTION_END																										

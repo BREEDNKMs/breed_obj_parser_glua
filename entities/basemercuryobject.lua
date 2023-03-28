@@ -200,7 +200,7 @@ function ENT:InitModel()
 	self:SetModel(modelpath or "models/error.mdl") 
 end 
 
-function ENT:HasPhysics() 
+function ENT:Mercury_HasPhysics() 
 	local mode = BREED.Objects[self.ob_name].mode 
 	local col_type = BREED.Objects[self.ob_name].collision 
 	return mode == "SPACE" or mode == "DRIVE" or mode == "WHEEL" or mode == "JET" or col_type == "POLY" or col_type == "BOX" or col_type == "SPHERE" 
@@ -214,9 +214,76 @@ end
 function ENT:Mercury_FixInputLimit(inputdata) 
 	if !inputdata then return nil end 
 	local newdata = table.Copy(inputdata) 
-	if newdata.minrot == "X" then newdata.minrot = 360 end 
-	if newdata.maxrot == "X" then newdata.maxrot = 360 end 
+	if newdata.minrot == "X" then newdata.minrot = 180 end 
+	if newdata.maxrot == "X" then newdata.maxrot = -180 end 
 	return newdata 
+end 
+
+function ENT:Mercury_CalculateMass() 
+	local mass = tonumber(BREED.Objects[self:GetOBName()].mass_kg) 
+	if mass < 2 then mass = tonumber(BREED.Objects[self:GetOBName()].thrust_kg) end 
+	if mass < 2 then mass = self:BoundingRadius() end 
+	return mass 
+end 
+
+function ENT:Mercury_InitAxisMove(axis,axisdata,parentent) 
+	-- local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, vector_origin, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
+	--[[ 
+	local joint = ents.Create("prop_physics") 
+	if IsValid(joint) then 
+		joint:SetModel("models/blackout.mdl") 
+		joint:SetPos(parentent:GetPos()) 
+		joint:PhysicsInitSphere(joint:BoundingRadius()) 
+		joint:SetSolid(SOLID_NONE) 
+		joint:SetNotSolid(1) 
+		joint:Spawn() 
+		joint:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+		joint:GetPhysicsObject():EnableGravity(0) 
+		joint:SetNotSolid(1) 
+		joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+		parentent.Mercury_entJoint = joint 
+		constraint.Weld(self,joint,0,0,0,true,false) 
+		constraint.NoCollide(self,joint,0,0) 
+		end 
+		--]] 
+		local LPos1 = self:WorldToLocal(parentent:GetPos()) 
+		local LPos2 = Vector(0,0,0) 
+	if axis == "X" then 
+	--[[ 
+		-- constraint.Axis(joint,parentent,0,0,joint:GetUp()*joint:BoundingRadius(),parentent:GetUp()*parentent:BoundingRadius(),0,0,0,1) 
+		local LPos1 = Vector(0,parentent:BoundingRadius(),0) 
+		local LPos2 = -LPos1 
+		-- print("lpos2:",LPos2) 
+		-- print("distance:",self:GetPos():Distance(parentent:GetPos())) 
+		-- local LPos2 = Vector(0,1,0) 
+		constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
+		print(parentent:GetOBName(),"used x") -- RD-MISSILEPOD-Y	used x rocket shooter 
+	--]] 
+
+	end 
+	
+	if axis == "Y" then 
+		-- constraint.Axis(joint,parentent,0,0,joint:GetForward()*joint:BoundingRadius(),parentent:GetForward()*parentent:BoundingRadius(),0,0,0,1) 
+		-- local LPos1 = self:GetPos()-parentent:GetPos() 
+		print(self:OBBMins(),self:OBBMaxs(),self:OBBCenter()) 
+		local LPos1 = self:OBBCenter() 
+		-- local LPos2 = parentent:GetPos()-self:GetPos() 
+		local hingePoint = self:WorldToLocal(parentent:GetPos()) 
+		local LPos2 = (hingePoint - parentent:OBBCenter()) 
+		local dist = self:GetPos():Distance(parentent:GetPos()) 
+		LPos1 = hingePoint 
+		LPos2 = Vector(0,0,1) 
+		print("lpos1:",LPos1) 
+		print("lpos2:",LPos2) 
+		print("distance:",dist) 
+		-- local LPos2 = Vector(0,1,0) 
+		constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
+		print(parentent:GetOBName(),"used y") -- RD-MISSILETOP-Y	used y main rotator 
+
+	end 
+	
 end 
 
 function ENT:InitSubob() 
@@ -235,7 +302,7 @@ function ENT:InitSubob()
 			end 
 			
 			
-			if (self:HasPhysics() and !parentent:HasPhysics()) or !self:HasPhysics() and parentent:HasPhysics() then 
+			if (self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics()) or !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
 				parentent:SetParent(self) 
 			end 
 			
@@ -261,14 +328,14 @@ function ENT:InitSubob()
 				suspension:SetNotSolid(1) 
 				suspension:SetCollisionGroup(COLLISION_GROUP_WORLD) 
 				constraint.Weld(self,suspension,0,0,0,true,false) 
-				constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) 
+				if IsValid(self:GetOwner()) then constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) end 
 				parentent:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
 				-- constraint.Muscle(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-(length*-scalar)),0,0,30,0,0,0,0,"cable/rope",color_white) 
 				-- constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
 				-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
 				-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
-				constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1)
-			elseif parentent:Mercury_CanRotate() and parentent:HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
+				constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1) 
+			elseif parentent:Mercury_CanRotate() and parentent:Mercury_HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
 				-- get turn axes 
 				local X,Y,Z 
 				for rotMethod, rotTbl in pairs(BREED.InputSettings[parentent.ob_name]) do -- "ANLG_LR" = {"Y", "Z"}	
@@ -282,8 +349,15 @@ function ENT:InitSubob()
 				X = self:Mercury_FixInputLimit(X) 
 				Y = self:Mercury_FixInputLimit(Y) 
 				Z = self:Mercury_FixInputLimit(Z) 
+				local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, vector_origin, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
+				if X and !Y and !Z then 
+					self:Mercury_InitAxisMove("X",X,parentent) 
+				elseif !X and Y and !Z then 
+					self:Mercury_InitAxisMove("Y",Y,parentent) 
+				elseif !X and !Y and Z then 
+					self:Mercury_InitAxisMove("Z",Z,parentent) 
+				elseif X and Y and Z then 
 				
-				if X or Y or Z then 
 					local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, parentent:GetUp()+parentent:GetForward()+parentent:GetRight(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
 					if X then 
 						print(parentent, "will use X") 
@@ -506,8 +580,7 @@ function ENT:InitMoveType()
 	end 
 	local phys = self:GetPhysicsObject() 
 	if phys and IsValid(phys) then 
-		local mass = tonumber(BREED.Objects[self.ob_name].mass_kg) 
-		mass = (mass and mass > 1 and mass) or BREED.Objects[self.ob_name].thrust_kg 
+		local mass = self:Mercury_CalculateMass() 
 		phys:SetMass(mass) 
 	end 
 end 

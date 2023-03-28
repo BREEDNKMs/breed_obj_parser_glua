@@ -70,8 +70,9 @@ end
 function ENT:SetupDataTables() 
 	self:NetworkVar("String",0,"OBName") 
 	self:NetworkVar("Entity",0,"SubEnt") 
+	self:NetworkVar("Entity",1,"ControllerSeat") 
 	self:NetworkVar("Float",0,"ThrustRate") 
-	self:NetworkVar("Vector",0,"Offset") 
+	self:NetworkVar("Vector",0,"Offset") -- for thruster 
 end 
 
 function ENT:InitializeSeat() 
@@ -82,15 +83,22 @@ function ENT:InitializeSeat()
 	pod:SetPos(pos) 
 	pod:SetAngles(self:GetAngles()) 
 	pod:SetParent(self) 
-	pod:SetModel("models/blackout.mdl") 
+	pod:SetModel("models/weapons/ar2_grenade.mdl") 
+	pod:SetRenderMode(1) 
 	pod:SetSolid(SOLID_NONE) 
 	pod:SetMoveType(MOVETYPE_NONE) 
+	pod:SetColor(Color(0,0,0,1)) 
 	pod:SetKeyValue("vehiclescript","scripts/vehicles/prisoner_pod.txt") 
 	pod:SetKeyValue("limitview",0) 
 	pod:Spawn() 
 	pod:SetMoveType(MOVETYPE_NONE) 
 	pod:SetNotSolid(1) 
-	self.Mercury_entSeat = pod 
+	self:SetControllerSeat(pod) 
+	pod:SetNW2Entity("Mercury_entParent",self) 
+	local viewEntity = self:Mercury_FindViewPointEnt() 
+	print("viewEntity is:",viewEntity) 
+	-- if IsValid(viewEntity) then driver:SetViewEntity(viewEntity) end 
+	pod:SetNW2Entity("Mercury_entView",viewEntity) 
 end 
 
 if SERVER then  
@@ -412,15 +420,18 @@ function ENT:InitSubob()
 			parentent:SetKeyValue(keystring,fieldname) -- define object name 
 			parentent:SetSubEnt(self) 
 			table.insert(self.tblsubents,parentent) 
-			parentent:Spawn() 
-			-- if self:GetMoveType() != MOVETYPE_VPHYSICS then 
-				-- parentent:SetParent(self) 
-			-- end 
 			local subent = self
 			if IsValid(parentent:GetSubEnt()) and IsValid(parentent:GetSubEnt():GetOwner()) then subent = parentent:GetSubEnt():GetOwner() end 
 			if subent then 
 				parentent:SetOwner(subent) -- this will decide the main entity we are connected to. this will be DROPSHIP entity for every object that DROPSHIP has. 
 			end 
+			if self != parentent:GetOwner() then 
+				table.insert(parentent:GetOwner().tblsubents,parentent) 
+			end 
+			parentent:Spawn() 
+			-- if self:GetMoveType() != MOVETYPE_VPHYSICS then 
+				-- parentent:SetParent(self) 
+			-- end 
 			
 			
 			if self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics() then 
@@ -620,7 +631,7 @@ function ENT:InitMoveType()
 			-- self:InitMoveType_MultiConvexVehicle() 
 			self:InitMoveType_Static() 
 		elseif col_type == "BOX" then 
-			self:PhysicsInitBox(-self:GetCollisionBounds(),self:GetCollisionBounds()) 
+			self:PhysicsInitBox(self:GetCollisionBounds()) 
 		elseif col_type == "SPHERE" then 
 			self:PhysicsInitSphere(self:BoundingRadius()) 
 		end 
@@ -827,9 +838,21 @@ function ENT:Think()
 		-- debugoverlay.Text(pos,"pos",0.15) 
 		-- debugoverlay.Text(ejectpos,"ejectpos",0.15) 
 		
-		if IsValid(self.Mercury_entSeat) then 
-			local driver = self.Mercury_entSeat:GetDriver() 
+		local seat = self:GetControllerSeat() 
+		if IsValid(seat) then 
+			local driver = seat:GetDriver() 
 			if IsValid(driver) then 
+				
+				local viewEntity = seat:GetNW2Entity("Mercury_entView") 
+				if !seat.RenderOverride then 
+					seat.RenderOverride = function(self,flags) 
+						local velocity = viewEntity:GetVelocity()*FrameTime() 
+						seat:SetRenderOrigin(viewEntity:GetPos()+velocity) 
+						seat:SetRenderAngles(viewEntity:GetAngles()) 
+					end 
+				end 
+				-- if seat.SetRenderOrigin and IsValid(viewEntity) then seat:SetRenderOrigin(viewEntity:GetPos()) end 
+				
 				if driver:KeyDown(IN_FORWARD) and self:GetThrustRate() < 100 then 
 					self:SetThrustRate(self:GetThrustRate()+0.5)
 				end 
@@ -896,7 +919,7 @@ function ENT:Think()
 				local curvel = self:GetVelocity() 
 				if self:GetPhysicsObject():IsValid() then curvel = self:GetPhysicsObject():GetVelocity() end 
 				curvel = curvel:Length() 
-				curvel = curvel/maxvel 
+				curvel = curvel/(maxvel*-scalar) 
 				pitch = math.Remap(curvel,0,100,pitch_min,pitch_max) 
 				self.LoopSound:ChangePitch(pitch) 
 			end 
@@ -906,6 +929,7 @@ function ENT:Think()
 		elseif obtype == "JET" then 
 			if pitch_mode == "THROTTLE" then 
 				local curvel = self:GetThrustRate() 
+				curvel = math.abs(curvel) 
 				pitch = math.Remap(curvel,0,100,pitch_min,pitch_max) 
 				self.LoopSound:ChangePitch(pitch) 
 			end 
@@ -917,7 +941,15 @@ function ENT:Think()
 	
 end 
 
-function ENT:PhysicsSimulate( phys, deltatime )
+function ENT:Mercury_FindViewPointEnt() 
+	local entBase = IsValid(self:GetOwner()) and self:GetOwner() or self -- our main entity we're connected to 
+	local entSub = self:GetSubEnt() -- the entity we're parented to 
+	for k,v in pairs(entBase.tblsubents) do 
+		if BREED.Objects[v:GetOBName()].camera then return v,v:GetOBName() end 
+	end 
+end 
+
+function ENT:PhysicsSimulate( phys, deltatime ) 
 	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
 
 	return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
@@ -926,3 +958,32 @@ end
 function ENT:OnRemove() 
 	if self.LoopSound then self.LoopSound:Stop() self.LoopSound = nil end 
 end 
+
+local function Mercury_VehicleViewPoint(apc,ply,tbl) 
+	-- ensure we are in an apc, clientsided 
+	if apc:GetClass() != "prop_vehicle_prisoner_pod" then return end 
+	if !IsValid(ply) and !IsValid(ply:GetVehicle()) and ply:GetVehicle():GetClass() != "prop_vehicle_apc" then return end 
+	local eyeAttachment = apc:LookupAttachment("vehicle_driver_eyes") -- a driver eyepos coordinate already exists 
+	if eyeAttachment != 0 then return end -- skip the hook 
+	-- we're in 
+	local enterTime = apc:GetNWFloat("apc_entertime") 
+	local originalOrigin = ply:EyePos() 
+	local desiredOrigin = apc:WorldSpaceCenter()+(apc:GetUp()*cl_apc_view_upvec:GetFloat()) 
+	local timeDiff = math.Clamp(CurTime() - enterTime,0,1) 
+	local resultOrigin = LerpVector(timeDiff,originalOrigin,desiredOrigin) 
+	-- print(ply:EyePos()) 
+	tbl.origin = resultOrigin 
+	--[[ 
+	-- note: angle fix not needed 
+	-- tbl.angles = apc:GetAngles() + Angle(apc:GetPoseParameter("vehicle_weapon_pitch"),apc:GetPoseParameter("vehicle_weapon_yaw"),0) 
+	local turret_attachment_angles = apc:WorldToLocalAngles(apc:GetAttachment(6).Ang) 
+	-- tbl.angles = apc:GetAngles() + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) -- this works best 
+	-- tbl.angles = ply:LocalEyeAngles() + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) -- this works kinda 
+	local pos2,ang2 = apc:GetVehicleViewPosition() 
+	-- tbl.angles = ang2 + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) 
+	--]] 
+	-- return tbl 
+end 
+-- hook.Add("CalcVehicleView","prop_vehicle_apc_view_fixer",fix_view) -- client 
+
+

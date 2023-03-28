@@ -410,7 +410,7 @@ local function DefineViewPointSettings(obj) -- to be completed
 	local x = obj[5] 
 	if tonumber(x) == nil then x = 0 end 
 	local posx,posy,posz = convert_vector(obj[3],obj[4],obj[5]) 
-	BREED.ViewPointSettings[object]							=	Vector(-x,obj[3],-obj[4])	
+	BREED.ViewPointSettings[object]							=	Vector(posx,posy,posz)	
 end 
 
 local function DefineWeaponName(obj) 

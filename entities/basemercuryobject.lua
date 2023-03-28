@@ -226,7 +226,8 @@ function ENT:Mercury_CalculateMass()
 	return mass 
 end 
 
-function ENT:Mercury_InitAxisMove(axis,axisdata,parentent) 
+function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint) 
+	local self = IsValid(joint) and joint or self 
 	-- local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, vector_origin, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
 	--[[ 
 	local joint = ents.Create("prop_physics") 
@@ -246,8 +247,9 @@ function ENT:Mercury_InitAxisMove(axis,axisdata,parentent)
 		constraint.NoCollide(self,joint,0,0) 
 		end 
 		--]] 
-		local LPos1 = self:WorldToLocal(parentent:GetPos()) 
-		local LPos2 = Vector(0,0,0) 
+	local LPos1 = self:WorldToLocal(parentent:GetPos()) 
+	print(LPos1) 
+	local LPos2 = Vector(0,0,0) 
 	if axis == "X" then 
 	--[[ 
 		-- constraint.Axis(joint,parentent,0,0,joint:GetUp()*joint:BoundingRadius(),parentent:GetUp()*parentent:BoundingRadius(),0,0,0,1) 
@@ -260,104 +262,93 @@ function ENT:Mercury_InitAxisMove(axis,axisdata,parentent)
 		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
 		print(parentent:GetOBName(),"used x") -- RD-MISSILEPOD-Y	used x rocket shooter 
 	--]] 
-
+		print(parentent,parentent:GetOBName(),"using x axis move up and down") 
+		LPos2 = Vector(0,1,0) 
 	end 
 	
 	if axis == "Y" then 
 		-- constraint.Axis(joint,parentent,0,0,joint:GetForward()*joint:BoundingRadius(),parentent:GetForward()*parentent:BoundingRadius(),0,0,0,1) 
 		-- local LPos1 = self:GetPos()-parentent:GetPos() 
-		print(self:OBBMins(),self:OBBMaxs(),self:OBBCenter()) 
-		local LPos1 = self:OBBCenter() 
+		-- print(self:OBBMins(),self:OBBMaxs(),self:OBBCenter()) 
+		-- local LPos1 = self:OBBCenter() 
 		-- local LPos2 = parentent:GetPos()-self:GetPos() 
-		local hingePoint = self:WorldToLocal(parentent:GetPos()) 
-		local LPos2 = (hingePoint - parentent:OBBCenter()) 
-		local dist = self:GetPos():Distance(parentent:GetPos()) 
-		LPos1 = hingePoint 
+		-- local hingePoint = self:WorldToLocal(parentent:GetPos()) 
+		-- local LPos2 = (hingePoint - parentent:OBBCenter()) 
+		-- local dist = self:GetPos():Distance(parentent:GetPos()) 
+		-- LPos1 = hingePoint 
 		LPos2 = Vector(0,0,1) 
-		print("lpos1:",LPos1) 
-		print("lpos2:",LPos2) 
-		print("distance:",dist) 
+		-- print("lpos1:",LPos1) 
+		-- print("lpos2:",LPos2) 
+		-- print("distance:",dist) 
 		-- local LPos2 = Vector(0,1,0) 
-		constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+		-- constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
 		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
-		print(parentent:GetOBName(),"used y") -- RD-MISSILETOP-Y	used y main rotator 
+		print(parentent,parentent:GetOBName(),"using y axis move left and right") 
 
 	end 
 	
+	if axis == "Z" then 
+		LPos2 = Vector(1,0,0) 
+	end 
+	constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+	
 end 
 
-function ENT:InitSubob() 
-	local subobtbl = BREED.Subob[self.ob_name] 
-	if subobtbl and subobtbl[1] then 
-		for i = 1, #subobtbl do 
-			local fieldname = table.GetKeys(subobtbl[i])[1] -- will return HANGER for BREED.Subob.DROPSHIP.1 
-			local parentent = ents.Create("basemercuryobject") 
-			parentent.ob_name = fieldname 
-			parentent:SetPos(self:LocalToWorld((subobtbl[i][fieldname].pos)*scalar))	-- nearly exact representation of local coordinates used in breed 
-			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang))	
-			parentent:SetKeyValue(keystring,fieldname) -- define object name 
-			parentent:SetSubEnt(self) 
-			if self:GetMoveType() != MOVETYPE_VPHYSICS then 
-				parentent:SetParent(self) 
+function ENT:Mercury_InitWheelAxis(parentent,joint) 
+	local self = IsValid(joint) and joint or self 
+	local length = tonumber(BREED.WheelSettings[parentent.ob_name].travel)*-scalar 
+	local suspension = ents.Create("prop_physics") 
+	-- suspension:SetPos(parentent:GetPos()) 
+	suspension:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
+	suspension:SetModel("models/blackout.mdl") 
+	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
+	suspension:Spawn() 
+	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
+	local phys = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
+	-- parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+	-- if phys then suspension:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()) end 
+	suspension:SetNotSolid(1) 
+	suspension:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+	constraint.Weld(self,suspension,0,0,0,true,false) 
+	if IsValid(self:GetOwner()) then constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) end 
+	-- parentent:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
+	parentent:SetPos(suspension:GetPos()+(suspension:GetUp()*-(length))) 
+	-- constraint.Muscle(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-(length*-scalar)),0,0,30,0,0,0,0,"cable/rope",color_white) 
+	-- constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
+	-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
+	-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
+	-- constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1) 
+	local LPos1 = suspension:WorldToLocal(parentent:GetPos()) 
+	local LPos2 = Vector(0,1,0) 
+	constraint.Axis(suspension,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+end 
+
+function ENT:Mercury_BaseInitPhysRotation(parentent,joint) 
+	if BREED.Objects[parentent.ob_name].mode == "WHEEL" and BREED.WheelSettings[parentent.ob_name] then 
+		self:Mercury_InitWheelAxis(parentent,joint) 
+	elseif parentent:Mercury_CanRotate() and parentent:Mercury_HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
+		-- get turn axes 
+		local X,Y,Z 
+		for rotMethod, rotTbl in pairs(BREED.InputSettings[parentent.ob_name]) do -- "ANLG_LR" = {"Y", "Z"}	
+			for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
+				X = rotAxis == "X" and rotAxisTbl or nil 
+				Y = rotAxis == "Y" and rotAxisTbl or nil 
+				Z = rotAxis == "Z" and rotAxisTbl or nil 
 			end 
-			
-			
-			if (self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics()) or !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
-				parentent:SetParent(self) 
-			end 
-			
-			local subent = self
-			if IsValid(parentent:GetSubEnt()) and IsValid(parentent:GetSubEnt():GetOwner()) then subent = parentent:GetSubEnt():GetOwner() end 
-			if subent then 
-				parentent:SetOwner(subent) -- this will decide the main entity we are connected to. this will be DROPSHIP entity for every object that DROPSHIP has. 
-			end 
-			table.insert(self.tblsubents,parentent) 
-			parentent:Spawn() 
-			if BREED.Objects[parentent.ob_name].mode == "WHEEL" and BREED.WheelSettings[parentent.ob_name] then 
-				local length = tonumber(BREED.WheelSettings[parentent.ob_name].travel)*-scalar 
-				length = length 
-				local suspension = ents.Create("prop_physics") 
-				-- suspension:SetPos(parentent:GetPos()) 
-				suspension:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
-				suspension:SetModel("models/blackout.mdl") 
-				suspension:PhysicsInitBox(suspension:GetModelBounds()) 
-				suspension:Spawn() 
-				suspension:PhysicsInitBox(suspension:GetModelBounds()) 
-				-- parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
-				suspension:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
-				suspension:SetNotSolid(1) 
-				suspension:SetCollisionGroup(COLLISION_GROUP_WORLD) 
-				constraint.Weld(self,suspension,0,0,0,true,false) 
-				if IsValid(self:GetOwner()) then constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) end 
-				parentent:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
-				-- constraint.Muscle(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-(length*-scalar)),0,0,30,0,0,0,0,"cable/rope",color_white) 
-				-- constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
-				-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
-				-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
-				constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1) 
-			elseif parentent:Mercury_CanRotate() and parentent:Mercury_HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
-				-- get turn axes 
-				local X,Y,Z 
-				for rotMethod, rotTbl in pairs(BREED.InputSettings[parentent.ob_name]) do -- "ANLG_LR" = {"Y", "Z"}	
-					for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
-						X = rotAxis == "X" and rotAxisTbl or nil 
-						Y = rotAxis == "Y" and rotAxisTbl or nil 
-						Z = rotAxis == "Z" and rotAxisTbl or nil 
-					end 
-				end 
+		end 
 				
-				X = self:Mercury_FixInputLimit(X) 
-				Y = self:Mercury_FixInputLimit(Y) 
-				Z = self:Mercury_FixInputLimit(Z) 
-				local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, vector_origin, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
-				if X and !Y and !Z then 
-					self:Mercury_InitAxisMove("X",X,parentent) 
-				elseif !X and Y and !Z then 
-					self:Mercury_InitAxisMove("Y",Y,parentent) 
-				elseif !X and !Y and Z then 
-					self:Mercury_InitAxisMove("Z",Z,parentent) 
-				elseif X and Y and Z then 
-				
+		X = self:Mercury_FixInputLimit(X) 
+		Y = self:Mercury_FixInputLimit(Y) 
+		Z = self:Mercury_FixInputLimit(Z) 
+		if X and !Y and !Z then 
+			self:Mercury_InitAxisMove("X",X,parentent,joint) 
+		elseif !X and Y and !Z then 
+			self:Mercury_InitAxisMove("Y",Y,parentent,joint) 
+		elseif !X and !Y and Z then 
+			self:Mercury_InitAxisMove("Z",Z,parentent,joint) 
+					
+		elseif X and Y and Z then 
+				--[[ 
 					local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, parentent:GetUp()+parentent:GetForward()+parentent:GetRight(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
 					if X then 
 						print(parentent, "will use X") 
@@ -390,12 +381,85 @@ function ENT:InitSubob()
 						constraint.NoCollide(self,joint,0,0) 
 					end 
 					constraint.AdvBallsocket(joint,parentent,bone1,bone2,LPos1,LPos2,forcelimit,torquelimit,xmin,ymin,zmin,xmax,ymax,zmax,xfric,yfric,zfric,onlyrotation,nocollide) 
-				else 
-					constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
-				end 
-				
-			else -- STATIC OBJECTS 
+					--]] 
+			print(parentent,"using XYZ rotation!") 
+		else 
+			if IsValid(joint) then 
+				constraint.Weld(joint,parentent,0,0,0,true,false) 
+			else 
 				constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
+			end 
+		end 
+				
+	else -- STATIC OBJECTS 
+		if IsValid(joint) then 
+			constraint.Weld(joint,parentent,0,0,0,true,false) 
+		else 
+			constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
+		end 
+	end 
+end 
+
+function ENT:InitSubob() 
+	local subobtbl = BREED.Subob[self.ob_name] 
+	if subobtbl and subobtbl[1] then 
+		for i = 1, #subobtbl do 
+			local fieldname = table.GetKeys(subobtbl[i])[1] -- will return HANGER for BREED.Subob.DROPSHIP.1 
+			local parentent = ents.Create("basemercuryobject") 
+			parentent.ob_name = fieldname 
+			parentent:SetPos(self:LocalToWorld((subobtbl[i][fieldname].pos)*scalar))	-- nearly exact representation of local coordinates used in breed 
+			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang))	
+			parentent:SetKeyValue(keystring,fieldname) -- define object name 
+			parentent:SetSubEnt(self) 
+			table.insert(self.tblsubents,parentent) 
+			parentent:Spawn() 
+			-- if self:GetMoveType() != MOVETYPE_VPHYSICS then 
+				-- parentent:SetParent(self) 
+			-- end 
+			local subent = self
+			if IsValid(parentent:GetSubEnt()) and IsValid(parentent:GetSubEnt():GetOwner()) then subent = parentent:GetSubEnt():GetOwner() end 
+			if subent then 
+				parentent:SetOwner(subent) -- this will decide the main entity we are connected to. this will be DROPSHIP entity for every object that DROPSHIP has. 
+			end 
+			
+			
+			if self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics() then 
+				print("base ent",self:GetOBName(), "has phys but sub ent",parentent:GetOBName(),"doesn't have physics") 
+				parentent:SetParent(self) 
+			end 
+			
+			if !self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics() then 
+				print("both base ent",self:GetOBName(),"and sub ent",parentent:GetOBName(),"doesn't have physics") 
+				parentent:SetParent(self) 
+			end 
+			
+			if !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				print("base ent",self:GetOBName(),"doesn't have phys but sub ent",parentent:GetOBName(),"has physics. weld those objects with a joint") 
+				local joint = ents.Create("prop_physics") 
+				joint:SetModel("models/blackout.mdl") 
+				joint:SetPos(parentent:GetPos()) 
+				joint:SetParent(self) 
+				joint:PhysicsInitSphere(joint:BoundingRadius()) 
+				joint:SetSolid(SOLID_NONE) 
+				joint:SetNotSolid(1) 
+				joint:Spawn() 
+				joint:GetPhysicsObject():SetMass(self:Mercury_CalculateMass()) 
+				joint:SetNotSolid(1) 
+				joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+				self:Mercury_BaseInitPhysRotation(parentent,joint) 
+				-- parentent:SetParent(self) 
+			end 
+			
+			-- if !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				-- parentent:SetParent(self) 
+			-- end 
+			
+			-- if (self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics()) or !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				-- parentent:SetParent(self) 
+			-- end 
+			
+			if self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				self:Mercury_BaseInitPhysRotation(parentent) 
 			end 
 		end 
 	end 
@@ -556,20 +620,24 @@ function ENT:InitMoveType()
 			-- self:InitMoveType_MultiConvexVehicle() 
 			self:InitMoveType_Static() 
 		elseif col_type == "BOX" then 
-			self:PhysicsInitBox(self:GetCollisionBounds())	
+			self:PhysicsInitBox(-self:GetCollisionBounds(),self:GetCollisionBounds()) 
 		elseif col_type == "SPHERE" then 
 			self:PhysicsInitSphere(self:BoundingRadius()) 
 		end 
 	-- the rest: static, controller, mzl, mine, head, torso, weapon, weapon_dummy, wheel, jet, biped, space, rotate, rotate_throttle, rotate_manned, turret, door, drive, hover, fly 
-	elseif mode == "WHEEL" then self:PhysicsInitSphere(self:BoundingRadius()) 
+	elseif mode == "WHEEL" then 
+		local scalar = BREED.WheelSettings[self:GetOBName()] 
+		scalar = scalar and scalar.radius 
+		scalar = scalar and scalar != "0" and tonumber(scalar) or 1 
+		self:PhysicsInitSphere(self:BoundingRadius()*scalar) 
 	elseif col_type == "POLY" then 
 		if IsValid(self:InitMoveType_Static()) then self:GetPhysicsObject():EnableMotion(true) end 
 	elseif col_type == "BOX" then 
-		self:PhysicsInitBox(self:GetCollisionBounds())	
-		self:GetPhysicsObject():EnableMotion( false ) 
+		self:PhysicsInitBox(self:GetCollisionBounds()) 
+		self:GetPhysicsObject():EnableMotion( true ) 
 	elseif col_type == "SPHERE" then 
 		self:PhysicsInitSphere(self:BoundingRadius()) 
-		self:GetPhysicsObject():EnableMotion( false ) 
+		self:GetPhysicsObject():EnableMotion( true ) 
 	elseif mode == "JET" then 
 		self:PhysicsInitBox(self:GetCollisionBounds()) 
 	
@@ -714,6 +782,9 @@ function ENT:Mercury_RotateThink()
 				local axis = (rotAxis == "X" and Vector(0,1,0)) or (rotAxis == "Y" and Vector(0,0,1)) or rotAxis == "Z" and Vector(1,0,0) 
 				local maxrotspeed = rotAxisTbl["rate"] 
 				maxrotspeed = maxrotspeed * 0.1 
+				if obmode == "ROTATE_THROTTLE" and IsValid(self:GetOwner()) then 
+					maxrotspeed = maxrotspeed * self:GetOwner():GetThrustRate() 
+				end 
 				if self.Mercury_bRotationBounce == true then axis = -axis end 
 				curAngles:RotateAroundAxis(axis,maxrotspeed*FrameTime()) 
 				

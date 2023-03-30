@@ -257,7 +257,7 @@ function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint)
 		end 
 		--]] 
 	local LPos1 = self:WorldToLocal(parentent:GetPos()) 
-	print(LPos1) 
+	LPos1 = !IsValid(joint) and LPos1 or vector_origin 
 	local LPos2 = Vector(0,0,0) 
 	if axis == "X" then 
 	--[[ 
@@ -303,6 +303,10 @@ function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint)
 	
 end 
 
+function ENT:Mercury_CalculateSuspensionPos(parentent,length) 
+	return parentent:GetPos()+(parentent:GetUp()*-(length))
+end 
+
 function ENT:Mercury_InitWheelAxis(parentent,joint) 
 	local self = IsValid(joint) and joint or self 
 	local length = tonumber(BREED.WheelSettings[parentent.ob_name].travel)*-scalar 
@@ -311,7 +315,9 @@ function ENT:Mercury_InitWheelAxis(parentent,joint)
 	suspension:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
 	suspension:SetModel("models/blackout.mdl") 
 	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
+	parentent.Mercury_entSuspension = suspension 
 	suspension:Spawn() 
+	suspension:Activate() 
 	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
 	local phys = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
 	-- parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
@@ -417,8 +423,9 @@ function ENT:InitSubob()
 			local parentent = ents.Create("basemercuryobject") 
 			parentent.ob_name = fieldname 
 			parentent.Mercury_vecLocalPos = (subobtbl[i][fieldname].pos)*scalar -- nearly exact representation of local coordinates used in breed 
+			parentent.Mercury_vecLocalAng = subobtbl[i][fieldname].ang -- nearly exact representation of local coordinates used in breed 
 			parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
-			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang)) 
+			parentent:SetAngles(self:LocalToWorldAngles(parentent.Mercury_vecLocalAng)) 
 			parentent:SetKeyValue(keystring,fieldname) -- define object name 
 			parentent:SetSubEnt(self) 
 			table.insert(self.tblsubents,parentent) 
@@ -452,13 +459,19 @@ function ENT:InitSubob()
 				joint:SetModel("models/blackout.mdl") 
 				joint:SetPos(parentent:GetPos()) 
 				joint:SetParent(self) 
-				joint:PhysicsInitSphere(joint:BoundingRadius()) 
+				joint:PhysicsInitBox(joint:GetModelBounds()) 
 				joint:SetSolid(SOLID_NONE) 
 				joint:SetNotSolid(1) 
 				joint:Spawn() 
-				joint:GetPhysicsObject():SetMass(self:Mercury_CalculateMass()) 
+				joint:Activate() 
+				joint:GetPhysicsObject():SetMass(999999) 
+				joint:GetPhysicsObject():EnableGravity(0) 
 				joint:SetNotSolid(1) 
+				joint:SetSolid(SOLID_NONE) 
+				joint:PhysicsInitBox(joint:GetModelBounds()) 
 				joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+				parentent.Mercury_entJoint = joint 
+				parentent:GetPhysicsObject():EnableGravity(0) 
 				self:Mercury_BaseInitPhysRotation(parentent,joint) 
 				-- parentent:SetParent(self) 
 			end 
@@ -472,6 +485,7 @@ function ENT:InitSubob()
 			-- end 
 			
 			if self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				print("both base ent",self:GetOBName(), "and sub ent", parentent:GetOBName(),"has physics.") 
 				self:Mercury_BaseInitPhysRotation(parentent) 
 			end 
 		end 
@@ -479,7 +493,6 @@ function ENT:InitSubob()
 end 
 
 function ENT:Mercury_MoveAllSubToLocalPos() 
-	if BREED.Objects[self:GetOBName()] == "WHEEL" then return false end 
 	if !IsValid(self:GetOwner()) and self.tblsubents then 
 		for k,parentent in pairs(self.tblsubents) do 
 			if IsValid(parentent:GetSubEnt()) then 
@@ -494,11 +507,23 @@ function ENT:Mercury_MoveAllSubToLocalPos()
 end 
 
 function ENT:Mercury_MoveSubToLocalPos() 
+	
 	if IsValid(self:GetSubEnt()) then 
 		local self2 = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() or self 
-		parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
-		self2:SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),false) 
+		if BREED.Objects[self:GetOBName()].mode == "WHEEL" and IsValid(self.Mercury_entSuspension) then 
+			self.Mercury_entSuspension:GetPhysicsObject():SetAngleVelocityInstantaneous(Vector(0,0,0)) 
+			self2:SetPos(self.Mercury_entSuspension:GetPhysicsObject():GetPos(),false) 
+			self:SetPos(self.Mercury_entSuspension:GetPos(),false) 
+		else  
+			-- parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
+			self2:SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),false) 
+		end 
 	end 
+end 
+
+function ENT:Mercury_ForceAngleToJoint() 
+	self:GetPhysicsObject():SetAngles(self.Mercury_entJoint:GetPhysicsObject():GetAngles()) 
+	self:SetAngles(self.Mercury_entJoint:GetAngles()) 
 end 
 
 function ENT:GetCollisionMeshTxt() 
@@ -1000,7 +1025,24 @@ function ENT:Mercury_FindViewPointEnt()
 end 
 
 function ENT:PhysicsSimulate( phys, deltatime ) 
-	
+
+	if IsValid(self.Mercury_entJoint) then 
+		print(self.Mercury_entJoint:GetAngles()) 
+		-- self2:SetPos() 
+		self.Mercury_entJoint:GetPhysicsObject():SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),true) 
+		self.Mercury_entJoint:GetPhysicsObject():SetAngles(self:GetAngles()) 
+		if IsValid(self.Mercury_entSuspension) then 
+			local length = tonumber(BREED.WheelSettings[self:GetOBName()].travel)*-scalar 
+			local wheelpos = self:Mercury_CalculateSuspensionPos(self.Mercury_entJoint,length) 
+			self.Mercury_entSuspension:GetPhysicsObject():SetPos(wheelpos,true) 
+			self.Mercury_entSuspension:SetPos(wheelpos,true) 
+			self.Mercury_entSuspension:GetPhysicsObject():SetAngleVelocityInstantaneous(Vector(0,0,0)) 
+		end 
+ 		self:Mercury_MoveSubToLocalPos() 
+		self:GetPhysicsObject():SetAngleVelocityInstantaneous(Vector(0,0,0)) 
+		self:Mercury_ForceAngleToJoint() 
+	end 
+
 	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
 
 	-- return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION

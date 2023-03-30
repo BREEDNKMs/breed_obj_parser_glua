@@ -1,842 +1,1041 @@
--- breed object reader for GLua 
--- by DevilHawk 
+AddCSLuaFile("entities/basemercuryobject.lua") 
 
--- define crucial tables beforehand 
+include("autorun/breed_objects.lua") 
 
-local materialPath = "materials/models/breed" 
-local soundPath = "sound/breed" 
+local error_model = "models/blackout.mdl"
+local scalar = -0.33 
+local keystring = "target" -- string to use from keyvalues, which refers to object name at first 
+local collision_mesh_sets = 3 
 
-BREED							=	{} 
-BREED.Objects					=	{} 
-BREED.AmmoSettings				=	{} 
-BREED.ApproachSettings			=	{} 
-BREED.CameraSettings			=	{} 
-BREED.CharacterSettings			=	{} 
-BREED.CollisionSphereSettings	=	{} 
-BREED.DamagePosSettings			=	{} -- where smokes emit as we take damage 
-BREED.DamageMeshSettings		=	{} 
-BREED.DamageMultiplierSetting	=	{}	
-BREED.DefaultAnim				=	{}	
-BREED.DefaultCharWeapon			=	{}
-BREED.EmitterSettings			=	{} 
-BREED.EnterIconSettings			=	{} 
-BREED.ExplosionSettings			=	{} 
-BREED.HitAnims					=	{}	
-BREED.HitSounds					=	{} 
-BREED.InputSettings 			=	{} 
-BREED.Interiorspace				=	{} 
-BREED.LauncherSettings			=	{} 
-BREED.LoadposSettings			=	{} 
-BREED.LightSettings				=	{} 
-BREED.MapIconSettings			=	{} 
-BREED.MuzzleSettings			=	{} 
-BREED.PanelSettings				=	{} 
-BREED.PilotSettings				=	{} 
-BREED.ObjectSounds				=	{} 
-BREED.SpriteSettings			=	{} 
-BREED.Squad_Follow				=	{} 
-BREED.States					=	{} 
-BREED.Subob						=	{} 
-BREED.Switches					=	{} 
-BREED.Tag_Generate				=	{} 
-BREED.ViewPointSettings			=	{} 
-BREED.Weapon_Name				=	{} 
-BREED.WeaponSounds				=	{} 
-BREED.WheelSettings				=	{} 
+ENT.Base			= "base_gmodentity" 
+ENT.Type 			= "anim" 
+ENT.PrintName		= "Mercury Entity" 
+ENT.Author			= "DevilHawk" 
+ENT.Spawnable		= false 
 
-MsgC(color_white,"BREED Scripting Init\n") 
-
-if !BREED.Debug then BREED.Debug	=	{} end 
-if BREED.Debug and BREED.Debug.ReloadTime and BREED.Debug.ReloadTime == CurTime() then 
-	MsgC(color_white,"Skipping multiple reloads in one tick.\n") 
-return end 
-BREED.Debug.ReloadTime			=	CurTime() 
--- print(BREED.Debug.ReloadTime) 
-
-local function hexcolortocolor_255(str) 
-	local firstsub = string.sub(str,1,2) 
-	local secondsub = string.sub(str,3,4) 
-	local thirdsub = string.sub(str,5,6) 
-	local fourthsub = string.sub(str,7) 
-	firstsub = firstsub and tonumber(firstsub,16) or 255 -- 16 means hexadecimal base 
-	secondsub = secondsub and tonumber(secondsub,16) or 255
-	thirdsub = thirdsub and tonumber(thirdsub,16) or 255 
-	fourthsub = fourthsub and tonumber(fourthsub,16) or 255 
-	return Color(firstsub,secondsub,thirdsub,fourthsub) 
+local function GetProperIndex(str) 
+	local strindexcount = #str 
+	local newstr = str 
+	for i = 1, strindexcount do -- iterate throughout the string 
+			if string.StartWith(newstr,"0") then 
+				newstr = string.sub(newstr,2) -- skip the zero at beginning 
+			else 
+				break -- stop when we didn't hit any zeros 
+			end 
+		end 
+	return newstr 
 end 
 
-local function GetMaterialPathFromID(id) 
-	return path 
-end 
-
-local function convert_vector(x,y,z) x = tonumber(x) y = tonumber(y) z = tonumber(z) return z,-x,-y end 
-
-local filepath = "objects" 
-
-local function CreateObject(obj) -- important func 
--- #DEF	OBNAME	MODE	MESH	HEAD_ICON	COCKPIT	ICON	COLLISN	DETECT	DRANGE	CAMERA	SHADOW	MASS KG	THRUST KG	DAMAGE	MAXVEL	ACCEL	SPACE	SURF	TILT_Z	CAN CARRY	VIEW OB	TARGET OB	SOUND Db	FIREMISSION AWARE	TARGETTABLE
-	local object = obj[2] 
-	if BREED.Objects[object] and BREED.Objects[object] == object then MsgC(Color(255,255,255),"Scripting: Duplicate Vehicle Def:"..object.."\n") return end 
-	-- BREED.Objects[object]		 			=		object 
-	BREED.Objects[object]		 			=		{} -- create field. i.e. BREED.Objects.DROPSHIP 
-	BREED.Objects[object].mode 				= 		obj[3] -- defines what this object actually is. a weapon, a vehicle, a thruster or a character? 
-	BREED.Objects[object].mesh 				= 		obj[4] -- modelname 
-	BREED.Objects[object].unused1			=		obj[5]
-	BREED.Objects[object].head_icon 		= 		obj[6] 
-	BREED.Objects[object].cockpit_icon 		= 		obj[7] 
-	BREED.Objects[object].collision 		= 		obj[8] -- collision mesh 
-	BREED.Objects[object].detect 			= 		obj[9] -- does this object look for other entities? if so, how? 
-	BREED.Objects[object].drange 			= 		obj[10] -- max. distance between detectable entities 
-	BREED.Objects[object].camera 			= 		obj[11] -- use this object as camera 
-	BREED.Objects[object].shadow 			= 		obj[12] -- entity has shadow 
-	BREED.Objects[object].mass_kg 			= 		obj[13] -- entity total mass 
-	BREED.Objects[object].thrust_kg 		= 		obj[14] -- how much this entity can thrust 
-	BREED.Objects[object].damage 			= 		obj[15] -- health 
-	BREED.Objects[object].maxvel 			= 		obj[16] -- how fast can we go 
-	BREED.Objects[object].accel 			= 		obj[17] -- acceleration 
-	BREED.Objects[object].space 			= 		obj[18] -- for flying entities 
-	BREED.Objects[object].surf 				= 		obj[19] 
-	BREED.Objects[object].tilt_z 			= 		obj[20] -- how much to tilt this entity on Z axis when flying 
-	BREED.Objects[object].can_carry 		= 		obj[21] -- can work as magnet for other vehicles 
-	BREED.Objects[object].view_ob 			= 		obj[22] 
-	BREED.Objects[object].target_ob 		= 		obj[23] 
-	BREED.Objects[object].sound_db 			= 		obj[24] 
-	BREED.Objects[object].firemission_aware = 		obj[25] 
-	BREED.Objects[object].targettable 		= 		obj[26] -- is this object targetable by seeking missiles 
-end 
-
-local function DefineSubOb(obj) -- completed: now can take more than one entry 
--- #REM	SUBOB	VEHICLE	SUBOB	POS	ANGLE	TASK 
--- Scripting: unknown vehicle subob task type %s 
-	local posx,posy,posz = convert_vector(obj[4],obj[5],obj[6]) 
-	local object = obj[2] -- vehicle 
-	local parent = obj[3] -- parent 
-	-- BREED.Subob[object] = object -- target obj  
-	if BREED.Subob[object] == nil then BREED.Subob[object] = {} end 
-	local tblsize = (#BREED.Subob[object])+1 
-	BREED.Subob[object][tblsize] 					=		{} 
-	BREED.Subob[object][tblsize][parent] 			= 		{} -- obj to create and mount 
-	-- BREED.Subob[object][tblsize][parent].pos 		= 		Vector(obj[4],obj[6],obj[5]) -- where our object will be, local to ent. x, y and z  
-	BREED.Subob[object][tblsize][parent].pos 		= 		Vector(posx,posy,posz) -- where our object will be, local to ent. x, y and z  
-	BREED.Subob[object][tblsize][parent].ang 		= 		Angle(obj[7],obj[8],obj[9]) -- angles, local to target ent. 
-	BREED.Subob[object][tblsize][parent].mode 		= 		obj[10] -- in which mode our object will be controlled. 
-															-- types: by itself (new), pilot controlled (sub) or vehicle controlled (auto) 
-end 
-
-local function DefineAmmoSettings(obj) -- completed 
--- #REM	ARM	VEHICLE	WEAPON	ROUNDS	MUZZLETYPE	SECONDARY WEAPON	SECONDARY ROUNDS	
-	local object = obj[2]	-- i.e. DROPSHIP	
-	local projectile = obj[3] 	-- i.e. minigun 
-	if BREED.AmmoSettings[object] == nil then BREED.AmmoSettings[object] = {} end 
-	--[[ 
-	BREED.AmmoSettings[object].weapon						=		projectile	
-	BREED.AmmoSettings[object].primary_rounds				=		obj[4]		
-	BREED.AmmoSettings[object].muzzle						=		obj[5]		
-	BREED.AmmoSettings[object].secondary_weapon				=		obj[6]		
-	BREED.AmmoSettings[object].secondary_rounds				=		obj[7]	
-	--]] 
-	BREED.AmmoSettings[object][projectile]					=		{}	
-	BREED.AmmoSettings[object][projectile].primary_rounds	=		obj[4]		
-	BREED.AmmoSettings[object][projectile].muzzle			=		obj[5]		
-	BREED.AmmoSettings[object][projectile].secondary_weapon	=		obj[6]		
-	BREED.AmmoSettings[object][projectile].secondary_rounds	=		obj[7]	
-end 
-
-local function DefineApproachSettings(obj) 
--- #REM	APPRCH	VEHICLE	POS
-	local object = obj[2]	
-	if BREED.ApproachSettings[object] == nil then BREED.ApproachSettings[object] = {} end 
-	local tblsize = (#BREED.ApproachSettings[object])+1 -- important to make it able to take more than one index 
-	local posx,posy,posz = convert_vector(obj[3],obj[4],obj[5]) 
-
-	BREED.ApproachSettings[object][tblsize] 				=		Vector(posx,posy,posz) 
-end 
-
-local function DefineCameraSettings(obj) -- completed 
-	-- #REM	CAMERA	VEHICLE	POS			ANGLE																				
-	-- example: #CAMERA	ASSAULT_RIFLEA	-63.2	38.6	-70	-15	0		
-	local object							=	obj[2]	
-	local posx,posy,posz = convert_vector(obj[3],obj[4],obj[5]) 
-	local pos								=	Vector(posx,posy,posz) 
-	local ang								=	Angle(obj[6],obj[7],0)	-- pitch and yaw only 
-	BREED.CameraSettings[object]			=	{} 
-	BREED.CameraSettings[object].pos		=	pos	
-	BREED.CameraSettings[object].ang		=	ang 
-end 
-
-local function DefineCharacterSettings(obj) -- completed 
-	-- #REM	CHARACTER	VEHICLE	SKILL	HEAD_ICON	SPEED	ACCURACY	MEDI_PAK	ENG_PAK	VOICE INDEX	VOICE PITCH	CAN_PILOT	WEAPON	
-	-- example: #CHARACTER	HOLO_GUNNY	GRUNT	0	1	0	3	0	0	1	1	PUNCH		
-	local object = obj[2]	
-	BREED.CharacterSettings[object]				=	{} 		
-	BREED.CharacterSettings[object].skill		=	obj[3]	
-	BREED.CharacterSettings[object].head_icon	=	obj[4]	
-	BREED.CharacterSettings[object].speed		=	obj[5]	
-	BREED.CharacterSettings[object].accuracy	=	obj[6]	
-	BREED.CharacterSettings[object].medi_pak	=	obj[7]	
-	BREED.CharacterSettings[object].eng_pak		=	obj[8]	
-	BREED.CharacterSettings[object].voice_index	=	obj[9]	
-	BREED.CharacterSettings[object].voice_pitch	=	obj[10]	
-	BREED.CharacterSettings[object].can_pilot	=	tobool(obj[11])	
-	BREED.CharacterSettings[object].weapon		=	obj[12]	
-
-end 
-
-local function DefineCollisionSphereSettings(obj) 
-
-end 
-
-local function DefineDamagePosSettings(obj) -- completed 
--- #REM	DAMAGE POS	VEHICLE	X	Y	Z	RADIUS	LIFE	
-	local object							=	obj[2]	
-	BREED.DamagePosSettings[object]			=	{} 
-	local posx,posy,posz = convert_vector(obj[3],obj[4],obj[5]) 
-	BREED.DamagePosSettings[object].pos		=	Vector(posx,posy,posz) 
-	BREED.DamagePosSettings[object].radius	=	obj[6]	
-	BREED.DamagePosSettings[object].life	=	obj[7]	
-end 
-
-local function DefineDamageMeshSettings(obj) -- completed: mesh to be after dying 
-	-- #DAMAGE_MESH	PROTO_MISSILEBASE-Y	557 
-	local object							=	obj[2] 
-	BREED.DamageMeshSettings[object]		=	obj[3] 	
-end 
-
-local function DefineDamageMultiplierSetting(obj) -- completed 
--- #REM	DAMAGE	VEHICLE	VALUE	
-	local object							=	obj[2]	
-	local dmg								=	obj[3]	
-	BREED.DamageMultiplierSetting[object]	=	dmg 
-end	
-
-local function DefineDefaultCharWeapon(obj) -- completed 
--- #REM	ARM	VEHICLE	WEAPON	
-	local object = obj[2]	
-	local weapon = obj[3]	
-	BREED.DefaultCharWeapon[object] = weapon	-- define only one weapon per char 
-end 
-
-local function DefineDefaultAnim(obj)	-- completed
--- #REM	ANIM	VEHICLE	ANIM	SUBINDEX	UPPER BODY	
-	local object = obj[2]	
-	local anim	 = obj[3]	
-	BREED.DefaultAnim[object]				=	{}	
-	BREED.DefaultAnim[object].anim			=	obj[4]	
-	BREED.DefaultAnim[object].subindex		=	obj[5]	
-	BREED.DefaultAnim[object].upper_body	=	tobool(obj[6])	-- turn 0 or 1 to boolean 
-end 
-
-local function DefineEmitterSettings(obj) -- completed 
--- #REM	EMITTER	VEHICLE	MODE	LIFE	TEXTURE	PROBABL	RADIUS	BLOOM	COL1	COL2	POSITION			VELOCITY	
--- #EMIT	BFIGHTERENG	THRTTL	0.2	67	0.1	400	1	ffe869	ff4800	0	0	0	0	0	-100 
-	local object = obj[2] 
-	if !BREED.EmitterSettings[object] then BREED.EmitterSettings[object]	=	{}	end 
-	local tblsize = (#BREED.EmitterSettings[object])+1 -- important to make it able to take more than one index 
+function ENT:Initialize() 
+	if CLIENT then return end 
+	self.ob_name = self:GetKeyValues()[keystring] -- define which ent is this 
+	self.tblsubents = { } 
+	self:SetOBName(self.ob_name) -- for client 
+	-- set model first 
+	self:InitModel() 
+	self:SetCollisionGroup(COLLISION_GROUP_NPC) 
+	self:SetCollisionBounds(self:GetModelBounds()) 
+	self:SetSaveValue("m_takedamage",2) 
+	self:SetHealth(BREED.Objects[self.ob_name].damage) 
+	self:SetMaxHealth(self:Health()) 
+	self:SetRenderMode(RENDERMODE_TRANSALPHA) 
+	self:InitMoveType() 
+	-- then start welding 
+	self:InitSubob() 
+	self.Mercury_angSpawnAngles = self:GetLocalAngles() 
+	self.Mercury_bRotationBounce = false 
+	self:StartMotionController() 
+	local max = self:OBBMaxs() 
+	local min = self:OBBMins() 
 	
-	BREED.EmitterSettings[object][tblsize] 				=	{} 
-	BREED.EmitterSettings[object][tblsize].mode = obj[3] 
-	BREED.EmitterSettings[object][tblsize].life = obj[4] 
-	BREED.EmitterSettings[object][tblsize].texture = obj[5] 
-	BREED.EmitterSettings[object][tblsize].probabl = obj[6] 
-	BREED.EmitterSettings[object][tblsize].radius = obj[7] 
-	BREED.EmitterSettings[object][tblsize].bloom = obj[8] 
-	BREED.EmitterSettings[object][tblsize].col1 = hexcolortocolor_255(obj[9]) 
-	BREED.EmitterSettings[object][tblsize].col2 = hexcolortocolor_255(obj[10])  
-	local posx,posy,posz = convert_vector(obj[11],obj[12],obj[13]) 
-	BREED.EmitterSettings[object][tblsize].position = Vector(posx,posy,posz) -- vector 
-	if (obj[17] and #obj[17] > 1) or tonumber(obj[14]) == nil then -- fix for LDPENG, RDPENG, LDPENG_MP, RDPENG_MP 
-		posx,posy,posz = convert_vector(obj[15],obj[16],obj[17]) 
-	else 
-		posx,posy,posz = convert_vector(obj[14],obj[15],obj[16]) 
+	if BREED.Objects[self:GetOBName()].mode == "JET" then 
+		-- self.ThrustOffset = Vector( 0, 0, max.z ) 
+		self.ThrustOffset = Vector( max.x, 0, 0 ) 
+		-- self.ThrustOffsetR = Vector( 0, 0, min.z ) 
+		self.ThrustOffsetR = Vector( min.x, 0, 0 ) 
+		self.ForceAngle = self.ThrustOffset:GetNormalized() * -1 
+		self:SetOffset( self.ThrustOffset ) 
+		
 	end 
-	BREED.EmitterSettings[object][tblsize].velocity = Vector(posx,posy,posz) -- vector 
-end 
-
-local function DefineEnterIconSettings(obj) -- completed 
-	local object = obj[2]	
-	BREED.EnterIconSettings[object]		=	obj[3]
-end 
-
-local function DefineExplosionSettings(obj) -- completed 
--- #REM	EXPLOSIVE_FORCE	VEHICLE	TYPE	FORCE	RADIUS	
-
-	local object = obj[2]	
-	BREED.ExplosionSettings[object]				=	{}	
-	BREED.ExplosionSettings[object].exptype		=	obj[3]	
-	BREED.ExplosionSettings[object].force		=	obj[4]	
-	BREED.ExplosionSettings[object].rad			=	obj[5]	
-end 
-
-local function DefineHitAnim(obj)	
--- #REM	HIT_ANIM	VEHICLE	STOOD ANIM	CROUCHED ANIM																						
-
-	local object = obj[2]	
-	BREED.HitAnims[object]				=	{}	
-	BREED.HitAnims[object].stood_anim		=	obj[3]	
-	BREED.HitAnims[object].crouched_anim	=	obj[4]	
-end	
-
-local function DefineInputSettings(obj)	
-	-- #REM	INPUT	VEHICLE	AXIS	INPUT	MAX	MIN	RATE	
-	-- input methods: ANLG_UD ANLG_LR DGTL_UD DGTL_LR 
-	-- Scripting: unknown vehicle axis input %s
-	-- Scripting: unknown vehicle axis %s 
-	-- #INPUT	TOPTURR2A	Y	ANLG_LR	X	X	1000 
-	local object = obj[2]	
-	if !BREED.InputSettings[object] then BREED.InputSettings[object] = { } end -- TOPTURR2A 
 	
-	if !BREED.InputSettings[object][obj[4]] then BREED.InputSettings[object][obj[4]] = { } end -- ANLG_LR 
-	if !BREED.InputSettings[object][obj[4]][obj[3]] then BREED.InputSettings[object][obj[4]][obj[3]] = { } end -- Y 
-	BREED.InputSettings[object][obj[4]][obj[3]].minrot = obj[5] -- X 
-	BREED.InputSettings[object][obj[4]][obj[3]].maxrot = obj[6] -- X 
-	BREED.InputSettings[object][obj[4]][obj[3]].rate = obj[7] -- 1000 
-end 
-
-local function DefineInteriorSpace(obj) 
-
-end 
-
-local function DefineLauncherSettings(obj) 
-
-end 
-
-local function DefineLightSettings(obj) -- completed 
--- #REM	SPRITE	VEHICLE	MODE	COLOR	POSITION			RADIUS	
-	local object = obj[2]	
-	if !BREED.LightSettings[object] then BREED.LightSettings[object]	=	{}	end 
-	local tblsize = (#BREED.LightSettings[object])+1 -- important to make it able to take more than one index 
-
-	BREED.LightSettings[object][tblsize] 				=	{} 
-	BREED.LightSettings[object][tblsize].texindex		=	obj[3] 
-	BREED.LightSettings[object][tblsize].color			=	hexcolortocolor_255(obj[4]) 
-	local posx,posy,posz = convert_vector(obj[5],obj[6],obj[7]) 
-	BREED.LightSettings[object][tblsize].pos			=	Vector(posx,posy,posz) 
-	BREED.LightSettings[object][tblsize].rad			=	obj[8] 
-end 
-
-local function DefineLoadposSettings(obj) 
-
-end 
-
-local function DefineMapIconSettings(obj) 
-	local object = obj[2]	
-	BREED.MapIconSettings[object]	=	obj[3]	
-end 
-
-local function DefineMuzzleSettings(obj) -- completed: can take more than one entry 
--- #REM	MUZZLE	VEHICLE	SUBTYPE	POSITION	
-	local object = obj[2] -- vehicle 
-	local subtype = obj[3] -- muzzle index. starts at 0. should start from 1 
-	if BREED.MuzzleSettings[object] == nil then BREED.MuzzleSettings[object] = {} end 
-	if BREED.MuzzleSettings[object][subtype] == nil then BREED.MuzzleSettings[object][subtype] = {} end 
-	local tblsize = (#BREED.MuzzleSettings[object][subtype])+1 -- array starts at one 
-	BREED.MuzzleSettings[object][subtype][tblsize] 			= 		{} 
-	local posx,posy,posz = convert_vector(obj[4],obj[5],obj[6]) 
-	BREED.MuzzleSettings[object][subtype][tblsize].pos 		= 		Vector(posx,posy,posz) -- where our muzzle will be, local to ent. x, y and z  
-end 
-
-local function DefinePanelSetting(obj) 
-
-end 
-
-local function DefinePilotPos(obj)	-- completed
--- #REM	PILOT	VEHICLE	PILOT OBJECT	POS	POSE	EJECT X	Y	Z	BLAST DAMAGE	0-lying	1-sitting	2-standing	
--- #REM	PILOT	VEHICLE	PILOT OBJECT	POS	POSE	EJECT X	Y	Z	BLAST DAMAGE	EXIT_ROOT	
--- #PILOT	DROPSHIP_MP	PILOT	0	-160	990		0	250	0	250	0	0	
-
-	local object = obj[2] -- vehicle 
-	-- BREED.PilotSettings[object] = object 
-	BREED.PilotSettings[object] = {} 
-	BREED.PilotSettings[object].pilotobject = obj[3] 
-	local posx,posy,posz = convert_vector(obj[4],obj[5],obj[6]) 
-	BREED.PilotSettings[object].pos = Vector(posx,posy,posz) 
-	if obj[12] then 
-		posx,posy,posz = convert_vector(obj[8],obj[9],obj[10]) 
-		BREED.PilotSettings[object].ejectpos = Vector(posx,posy,posz) 
-		BREED.PilotSettings[object].blastdamage = obj[11] 
-		BREED.PilotSettings[object].sit_type = obj[12] 
-	else	
-		posx,posy,posz = convert_vector(obj[7],obj[8],obj[9]) 
-		BREED.PilotSettings[object].ejectpos = Vector(posx,posy,posz) 
-		BREED.PilotSettings[object].blastdamage = obj[10] 
-		BREED.PilotSettings[object].sit_type = obj[11] 
+	if BREED.PilotSettings[self:GetOBName()] then 
+		self:InitializeSeat() 
 	end 
-end 
-
-local function DefineSpriteSettings(obj) -- completed 
-	local object = obj[2]	
-	if !BREED.SpriteSettings[object] then BREED.SpriteSettings[object]	=	{}	end 
-	local tblsize = (#BREED.SpriteSettings[object])+1 -- important to make it able to take more than one index 
-
-	BREED.SpriteSettings[object][tblsize] 				=	{} 
-	BREED.SpriteSettings[object][tblsize].texindex		=	obj[3] 
-	BREED.SpriteSettings[object][tblsize].color			=	hexcolortocolor_255(obj[4]) 
-	local posx,posy,posz = convert_vector(obj[5],obj[6],obj[7]) 
-	BREED.SpriteSettings[object][tblsize].pos			=	Vector(posx,posy,posz) 
-	BREED.SpriteSettings[object][tblsize].rad			=	obj[8] 
-end 
-
-local function DefineStates(obj)	
-
-end 
-
-local function DefineSwitches(obj) --	completed	
-	-- #REM	SWITCH	VEHICLE	TYPE	STATE	ICON	POS X	POS Y	POS Z	RADIUS	VAR	
-	-- #SWITCH	USCDARWIN	STATE_TOGGLE	ST07	2	-6.2	17	-120.9	4	0	
-
-	local object = obj[2]	
-	if !BREED.Switches[object] then BREED.Switches[object]	=	{}	end 
-	local tblsize = (#BREED.Switches[object])+1 -- important to make it able to take more than one index 
-
-	BREED.Switches[object][tblsize] 						=	{} 
-	BREED.Switches[object][tblsize].stype 					=	obj[3] 
-	BREED.Switches[object][tblsize].state 					=	obj[4] 
-	BREED.Switches[object][tblsize].icon 					=	obj[5] 
-	local posx,posy,posz = convert_vector(obj[6],obj[7],obj[8]) 
-	BREED.Switches[object][tblsize].pos 					=	Vector(posx,posy,posz) 
-	BREED.Switches[object][tblsize].rad 					=	obj[9] 
-	BREED.Switches[object][tblsize].var 					=	obj[10] 
-end 
-
-local function DefineTag(obj) 
-	local object = obj[2]	
-	if !BREED.Tag_Generate then BREED.Tag_Generate	=	{}	end	
-	BREED.Tag_Generate[object]						=	true	
-end 
-
-local function DefineViewPointSettings(obj) -- to be completed 
--- #REM	VIEWPOINT	VEHICLE	POSITION	
-	local object = obj[2] -- vehicle 
-	local x = obj[5] 
-	if tonumber(x) == nil then x = 0 end 
-	local posx,posy,posz = convert_vector(obj[3],obj[4],obj[5]) 
-	BREED.ViewPointSettings[object]							=	Vector(posx,posy,posz)	
-end 
-
-local function DefineWeaponName(obj) 
-
-end 
-
-local function DefineWheelSettings(obj) 
-	-- #REM	WHEEL	VEHICLE	DRIVEN	STEERED	ROTATE	TRAVEL cm	SMOKE	FORCE X OFF	FORCE Z OFF	HIDDEN_Y	RADIUS (M)	
-	-- #WHEEL	DUALWHEELS		2	0	1	100	1	0	-600	0	0	
-	-- #WHEEL	FDUALWHEELS		2	1	1	100	1	0	0	0	0	
-	-- driven: 0 prevents throttling. 1 and 2 allows. 
-	-- steered: allow wheel steering input. 
-	-- rotate: allow wheel rotation. 
-	-- travel cm: suspension amount, from start to down 
-	-- force x off: increment "x" sideways wheel length 
-	-- force z off: useless 
-	-- radius: wheel radius 
-	local object = obj[2] -- vehicle 
-	BREED.WheelSettings[object]				=	{} 
-	if tonumber(obj[3]) == nil then 
-	BREED.WheelSettings[object].driven		=	obj[4] 
-	BREED.WheelSettings[object].steered		=	obj[5] 
-	BREED.WheelSettings[object].rotate		=	obj[6] 
-	BREED.WheelSettings[object].travel		=	obj[7] 
-	BREED.WheelSettings[object].smoke		=	obj[8] 
-	BREED.WheelSettings[object].force_x_off	=	obj[9] 
-	BREED.WheelSettings[object].force_z_off	=	obj[10] 
-	BREED.WheelSettings[object].hidden_y	=	obj[11] 
-	BREED.WheelSettings[object].radius		=	obj[12] 
-	else 
-	BREED.WheelSettings[object].driven		=	obj[3] 
-	BREED.WheelSettings[object].steered		=	obj[4] 
-	BREED.WheelSettings[object].rotate		=	obj[5] 
-	BREED.WheelSettings[object].travel		=	obj[6] 
-	BREED.WheelSettings[object].smoke		=	obj[7] 
-	BREED.WheelSettings[object].force_x_off	=	obj[8] 
-	BREED.WheelSettings[object].force_z_off	=	obj[9] 
-	BREED.WheelSettings[object].hidden_y	=	obj[10] 
-	BREED.WheelSettings[object].radius		=	obj[11] 
-	end 
-end 
-
-local function Squad_Follow_Enabled(obj) 
-
-end 
-
-local function process_mercury_objcmd(tbl) 
-	-- print(tbl[1])
-	-- command processer that seperates tables of commands to their own parsers 
-	-- feed it with a table like {"#SQUAD_FOLLOW","DARWIN_SEC0","1",2"} 
-	-- and it will send the following table to Squad_Follow_Enabled parser 
-	if tbl[1] == "#DEF" then 
-		CreateObject(tbl) 
-		-- MsgC(color_white,"Defined new object "..tbl[2].."\n") 
-	elseif tbl[1] == "#SUBOB" then 
-		DefineSubOb(tbl) 
-	elseif tbl[1] == "#AMMO" then 
-		DefineAmmoSettings(tbl) 
-	elseif tbl[1] == "#ARM" then 
-		DefineDefaultCharWeapon(tbl)	
-	elseif tbl[1] == "#APPRCH" then 
-		DefineApproachSettings(tbl) 
-	elseif tbl[1] == "#ANIM" then	
-		DefineDefaultAnim(tbl)	
-	elseif tbl[1] == "#CAMERA" then 
-		DefineCameraSettings(tbl) 
-	elseif tbl[1] == "#CHARACTER" then
-		DefineCharacterSettings(tbl) 
-	elseif tbl[1] == "#COLLISION_SPHERE" then 
-		DefineCollisionSphereSettings(tbl) 
-	elseif tbl[1] == "#DAMAGE_MESH" then 
-		DefineDamageMeshSettings(tbl) 
-	elseif tbl[1] == "#DAMAGE_POS" then 
-		DefineDamagePosSettings(tbl) 
-	elseif tbl[1] == "#DAMAGE_SCALAR" then 
-		DefineDamageMultiplierSetting(tbl)	
-	elseif tbl[1] == "#EMIT" then 
-		DefineEmitterSettings(tbl) 
-	elseif tbl[1] == "#ENTER_ICON" then 
-		DefineEnterIconSettings(tbl) 
-	elseif tbl[1] == "#EXPLOSIVE_FORCE" then 
-		DefineExplosionSettings(tbl) 
-	elseif tbl[1] == "#HIT_ANIM" then 
-		DefineHitAnim(tbl)	
-	elseif tbl[1] == "#INPUT" then 
-		DefineInputSettings(tbl) 
-	elseif tbl[1] == "#MAP_ICON" then 
-		DefineMapIconSettings(tbl) 
-	elseif tbl[1] == "#MZL" then 
-		DefineMuzzleSettings(tbl) 
-	elseif tbl[1] == "#LIGHT" then 
-		DefineLightSettings(tbl) 
-	elseif tbl[1] == "#LOADPOS" then 
-		DefineLoadposSettings(tbl) 
-	elseif tbl[1] == "#INTERIOR_SPACE" then 
-		DefineInteriorSpace(tbl) 
-	elseif tbl[1] == "#PANEL" then 
-		DefinePanelSetting(tbl) 
-	elseif tbl[1] == "#PILOT" then 
-		DefinePilotPos(tbl) 
-	elseif tbl[1] == "#SPRT" then 
-		DefineSpriteSettings(tbl)
-	elseif tbl[1] == "#STATE" then 
-		DefineStates(tbl) 
-	elseif tbl[1] == "#SQUAD_FOLLOW" then 
-		Squad_Follow_Enabled(tbl) 
-	elseif tbl[1] == "#SWITCH" then 
-		DefineSwitches(tbl) 
-	elseif tbl[1] == "#TAG_GENERATE" then 
-		DefineTag(tbl) 
-	elseif tbl[1] == "#VPOINT" then 
-		DefineViewPointSettings(tbl) 
-	elseif tbl[1] == "#WEAPON_NAME" then 
-		DefineWeaponName(tbl) 
-	elseif tbl[1] == "#WHEEL" then 
-		DefineWheelSettings(tbl) 
-	elseif tbl[1] == "#REM" then 
-	-- else MsgC(color_white,"Unknown command:"..tbl[1].."\n") 
-	end 
-end 
-
-local function DefineSoundScript(obj) -- to be completed 
--- #REM	SAMPLE	PITCH VARIANCE%	VOLUME VARIANCE%	VOLUME	FALLOFF (M)	
--- #SAMPLE	1	0	0	100	50	
-	local samplenum = obj[2] -- sample number 
-	-- obj[4] is volume variance, but cannot be defined in soundscripts 
-
-	local soundFile = BREED.Sounds[samplenum] 
-	if   soundFile then soundFile = Sound("breed/"..soundFile) 
-	else soundFile = "common/null.wav" end 
-
-	sound.Add( 
-	{ 
-		name = "BREED."..samplenum, 
-		channel = CHAN_AUTO, 
-		volume = obj[5]*0.01, 
-		level = obj[6], 
-		pitch = {100+obj[3],100-obj[3]}, 
-
-		sound = { soundFile } 
-	}) 
-end 
-
-local function DefineObjectSound(obj) -- completed 
--- #REM	OB	LPSND	START	END	PITCH MODE	EFFECT MIN%	EFFECT MAX%	VOLUME MODE	EFFECT MIN%	EFFECT MAX%	VOL%	PITCH%	
--- #OBJECT	dropship	430	0	0	VELOCITY	30	50	VELOCITY	60	70	100	100	
-	local object = string.upper(obj[2]) -- dropship 
-	BREED.ObjectSounds[object]				=	{ } 
-	BREED.ObjectSounds[object].lpsnd		=	obj[3] -- 430 
-	BREED.ObjectSounds[object].start		=	obj[4] -- 431 
-	BREED.ObjectSounds[object].endsound		=	obj[5] -- 432 
-	BREED.ObjectSounds[object].pitch_mode	=	obj[6] -- VELOCITY 
-	BREED.ObjectSounds[object].pitch_min	=	obj[7] -- 30 
-	BREED.ObjectSounds[object].pitch_max	=	obj[8] -- 50 
-	BREED.ObjectSounds[object].volume_mode	=	obj[9] -- VELOCITY 
-	BREED.ObjectSounds[object].volume_min	=	obj[10] -- 60 
-	BREED.ObjectSounds[object].volume_max	=	obj[11] -- 70 
-	BREED.ObjectSounds[object].volume		=	obj[12] -- 100 
-	BREED.ObjectSounds[object].pitch		=	obj[13] -- 100
-end 
-
-local function DefineWeaponSound(obj) 
--- #REM	WEAPON	FIRE	LOOP	RELOAD	EMPTY	CARTRIDGE EJECT	CARTRIDGE HIT	RICOCHET	EXPLODE	LOCKED ON	
--- #WEAPON	iw-r300	620	81	914	621	623	672	624	0	0	
-	local object = string.upper(obj[2]) -- iw-r300 
-	BREED.WeaponSounds[object]						=	{ } 
-	BREED.WeaponSounds[object].fire					=	obj[3] -- 620 
-	BREED.WeaponSounds[object].loop					=	obj[4] -- 81, bullet_flyby.wav 
-	BREED.WeaponSounds[object].reload				=	obj[5] -- 914 
-	BREED.WeaponSounds[object].empty				=	obj[6] -- 621 
-	BREED.WeaponSounds[object].cartridge_eject		=	obj[7] -- 623, iw_grenade_empty.wav 
-	BREED.WeaponSounds[object].cartridge_hit		=	obj[8] -- 672, sniper_rifle_cartridge_hit.wav 
-	BREED.WeaponSounds[object].ricochet				=	obj[9] -- ricochet, 624 ,individual_weapon_ricochet.wav
-	BREED.WeaponSounds[object].explode				=	obj[10] -- 0 
-	BREED.WeaponSounds[object].locked_on			=	obj[11] -- 0 
 	
-end 
-
-local function DefineHitSound(obj) 
-	-- #REM	WEAPON	STONE	FLESH	METAL	ARMOUR	WOOD	WATER	SAND	GRAVEL	GRASS	ICE	SNOW	BODY_ARMOUR	BREED_ARMOUR	GLASS 
-	-- #OBJECT_HIT	GRUNT	941	150	925	150	150	923	929	154	165	150	158	150	150	150 
-	-- #WEAPON_HIT	BPLASMA_MP	119	116	118	117	110	112	115	111	113	120	114	117	117	73
-	local object = obj[2] -- can be either OBJECT or WEAPON 
-	BREED.HitSounds[object]					=	{} 
-	BREED.HitSounds[object].stone			=	obj[3] 
-	BREED.HitSounds[object].flesh			=	obj[4] 
-	BREED.HitSounds[object].metal			=	obj[5] 
-	BREED.HitSounds[object].armour			=	obj[6] 
-	BREED.HitSounds[object].wood			=	obj[7] 
-	BREED.HitSounds[object].water			=	obj[8] 
-	BREED.HitSounds[object].sand			=	obj[9] 
-	BREED.HitSounds[object].gravel			=	obj[10] 
-	BREED.HitSounds[object].grass			=	obj[11] 
-	BREED.HitSounds[object].ice				=	obj[12] 
-	BREED.HitSounds[object].snow			=	obj[13] 
-	BREED.HitSounds[object].body_armour		=	obj[14] 
-	BREED.HitSounds[object].breed_armour	=	obj[15] 
-	BREED.HitSounds[object].glass			=	obj[16] 
-end 
-
-local function process_mercury_soundfile(tbl) -- completed 
-	if tbl[1] == "#OBJECT" then 
-		DefineObjectSound(tbl) 
-	elseif tbl[1] == "#SAMPLE" then 
-		DefineSoundScript(tbl) 
-	elseif tbl[1] == "#WEAPON" then 
-		DefineWeaponSound(tbl) 
-	elseif tbl[1] == "#OBJECT_HIT" or tbl[1] == "#WEAPON_HIT" then 
-		DefineHitSound(tbl) 
-	elseif tbl[1] == "#REM" then 
-	-- else MsgC(color_white,"Unknown command:"..tbl[1].."\n") 
+	for k,v in pairs(self.tblsubents) do 
+		if IsValid(v) then constraint.NoCollide(self,v,0,0) end 
 	end 
+	self:Activate() 
+end 
+
+function ENT:SetupDataTables() 
+	self:NetworkVar("String",0,"OBName") 
+	self:NetworkVar("Entity",0,"SubEnt") 
+	self:NetworkVar("Entity",1,"ControllerSeat") 
+	self:NetworkVar("Float",0,"ThrustRate") 
+	self:NetworkVar("Vector",0,"Offset") -- for thruster 
+end 
+
+function ENT:InitializeSeat() 
+	local pos = BREED.PilotSettings[self:GetOBName()].pos*scalar 
+	pos = self:LocalToWorld(pos) 
+	local pod = ents.Create("prop_vehicle_prisoner_pod") 
+	if !IsValid(pod) then return end 
+	pod:SetPos(pos) 
+	pod:SetAngles(self:GetAngles()) 
+	pod:SetParent(self) 
+	pod:SetModel("models/weapons/ar2_grenade.mdl") 
+	pod:SetRenderMode(1) 
+	pod:SetSolid(SOLID_NONE) 
+	pod:SetMoveType(MOVETYPE_NONE) 
+	pod:SetColor(Color(0,0,0,1)) 
+	pod:SetKeyValue("vehiclescript","scripts/vehicles/prisoner_pod.txt") 
+	pod:SetKeyValue("limitview",0) 
+	pod:Spawn() 
+	pod:SetMoveType(MOVETYPE_NONE) 
+	pod:SetNotSolid(1) 
+	self:SetControllerSeat(pod) 
+	pod:SetNW2Entity("Mercury_entParent",self) 
+	local viewEntity = self:Mercury_FindViewPointEnt() 
+	print("viewEntity is:",viewEntity) 
+	-- if IsValid(viewEntity) then driver:SetViewEntity(viewEntity) end 
+	pod:SetNW2Entity("Mercury_entView",viewEntity) 
+end 
+
+if SERVER then  
+	function ENT:SetForce( force, mul ) 
+
+		if ( force ) then self.force = force end 
+		mul = mul or 1 
+
+		local phys = self:GetPhysicsObject() 
+		if ( !IsValid( phys ) ) then 
+			Msg( "Warning: [gmod_thruster] Physics object isn't valid!\n" ) 
+			return 
+		end 
+
+		-- Get the data in worldspace 
+		local ThrusterWorldPos = phys:LocalToWorld( self.ThrustOffset ) 
+		local ThrusterWorldForce = phys:LocalToWorldVector( self.ThrustOffset * -1 ) 
+
+		-- Calculate the velocity 
+		ThrusterWorldForce = ThrusterWorldForce * self.force * mul * 50 
+
+		local motionEnabled = phys:IsMotionEnabled() 
+		phys:EnableMotion( true ) -- Dirty hack for PhysObj.CalculateVelocityOffset while frozen 
+		self.ForceLinear, self.ForceAngle = phys:CalculateVelocityOffset( ThrusterWorldForce, ThrusterWorldPos ) 
+		phys:EnableMotion( motionEnabled ) 
+
+		self.ForceLinear = phys:WorldToLocalVector( self.ForceLinear ) 
+
+		if ( mul > 0 ) then 
+			self:SetOffset( self.ThrustOffset ) 
+		else 
+			self:SetOffset( self.ThrustOffsetR ) 
+		end 
+
+		-- self:SetNWVector( 1, self.ForceAngle ) 
+		-- self:SetNWVector( 2, self.ForceLinear ) 
+
+		-- self:SetOverlayText( "Force: " .. math.floor( self.force ) ) 
+
+	end 
+	
+	function ENT:Mercury_GetForceMultiplier() 
+		local thrustForce = 1 
+		if self:GetMaxHealth() > 1 then 
+			thrustForce = self:Health()/self:GetMaxHealth() 
+		end 
+		if BREED.Objects[self.ob_name].mesh == "5" then return thrustForce*100 end 
+
+		return thrustForce 
+	end 
+	
 end 
 
 --[[ 
--- UNDONE: NO NEED TO USE THIS 
-local function AssignModelPathforIndexes() 
-	if #BREED.Objects == 0 then return end 
-	MsgC(color_white,"Loading Models") 
-	local model_names = file.Find("models/breed/*.mdl") -- list models into a table 
-	for obname,_ in pairs(BREED.Objects) do -- iterate over each object 
-		local meshindex = BREED.Objects[obname].mesh -- 110 for dropship, 004 for earth 
-		for k,model_name in ipairs(model_names) do -- now iterate over each model 
-			-- skip if we have more numbers after wherever we are checking 
-			if string.StartWith(model_name,meshindex) and !isnumber(string.sub(model_name,#meshindex+1,#meshindex+1)) then 
-				BREED.Objects[obname].mesh = Model("models/breed/"..model_name) 
-				BREED.Objects[obname].mesh_has_model = true 
-				break -- stop iterating 
-			end 
-			
-			if !BREED.Objects[obname].mesh_has_model and string.StartWith(model_name,"0"..meshindex) and !isnumber(string.sub(model_name,#meshindex+2,#meshindex+2)) then -- reiterate with 0 at beginning 
-				BREED.Objects[obname].mesh = Model("models/breed/"..model_name) 
-				BREED.Objects[obname].mesh_has_model = true 
-				break -- stop iterating 
+-- model name determiner passed to autorun 
+function ENT:DecideModelName() 
+	local meshtype = BREED.Objects[self.ob_name].mesh 
+	if meshtype == "0" then return "models/blackout.mdl" end 
+	if meshtype == "5" then return "models/blackout.mdl" end 
+	local folderpath = "models/breed/" 
+	local filename = file.Find(folderpath..meshtype.."*.mdl","GAME")[1] 
+	if !filename then filename = file.Find(folderpath.."0"..meshtype.."*.mdl","GAME")[1] end 
+	-- if !filename then filename = file.Find(folderpath.."00"..meshtype.."*.mdl","GAME")[1] end 
+	if filename then return folderpath..filename else return nil end 
+end 
+
+function ENT:InitModel() 
+	-- local folderpath = "models/breed/" 
+	-- local modelindex = self:GetKeyValues().skin 
+	-- local filename = file.Find(folderpath..modelindex.."*")[1] 
+	-- if filename then self:SetModel(filename) end 
+	local filename = self:DecideModelName() 
+	if filename then self:SetModel(filename) else MsgC(color_white,"Model index not found: "..BREED.Objects[self.ob_name].mesh .."\n") end 
+end 
+
+function ENT:InitModel() 
+	local meshindex = BREED.Objects[self.ob_name].mesh 
+	if meshindex == "0" or meshindex == "5" then self:SetModel("models/blackout.mdl") return end 
+	if util.IsValidModel(meshindex) then self:SetModel(meshindex) else self:SetModel(error_model) end 
+end 
+--]] 
+
+function ENT:Mercury_TranslateMeshIndex(meshindex) 
+	if meshindex == 110 then return 142 end 
+	return meshindex 
+end 
+
+function ENT:InitModel() 
+	print("OBJECT NAME:", self.ob_name) 
+	local meshindex = BREED.Objects[self.ob_name].mesh 
+	if meshindex == "0" or meshindex == "5" then self:SetModel("models/blackout.mdl") return end 
+	--[[ 
+	local strindexcount = #meshindex 
+	for i = 1, strindexcount do 
+		if string.StartWith(meshindex,"0") then 
+			meshindex = string.sub(meshindex,2) -- skip the zero at beginning 
+		else 
+			break 
+		end 
+	end 
+	--]] 
+	meshindex = GetProperIndex(meshindex) 
+	-- meshindex = self:Mercury_TranslateMeshIndex(meshindex) 
+	local modelname = BREED.Models[meshindex] 
+	if !modelname then MsgC(color_white,"Removed entity with meshindex "..BREED.Objects[self.ob_name].mesh.."\n") SafeRemoveEntity(self) return end 
+	local modelpath = Model("models/breed/"..BREED.Models[meshindex]) 
+	self:SetModel(modelpath or "models/error.mdl") 
+end 
+
+function ENT:Mercury_HasPhysics() 
+	local mode = BREED.Objects[self.ob_name].mode 
+	local col_type = BREED.Objects[self.ob_name].collision 
+	return mode == "SPACE" or mode == "DRIVE" or mode == "WHEEL" or mode == "JET" or col_type == "POLY" or col_type == "BOX" or col_type == "SPHERE" 
+end 
+
+function ENT:Mercury_CanRotate() 
+	local mode = BREED.Objects[self:GetOBName()].mode 
+	return mode == "TURRET" or mode == "ROTATE" or mode == "JET" or mode == "ROTATE_THROTTLE" or mode == "WHEEL" or mode == "ROTATE_MANNED", mode 
+end 
+
+function ENT:Mercury_FixInputLimit(inputdata) 
+	if !inputdata then return nil end 
+	local newdata = table.Copy(inputdata) 
+	if newdata.minrot == "X" then newdata.minrot = 180 end 
+	if newdata.maxrot == "X" then newdata.maxrot = -180 end 
+	return newdata 
+end 
+
+function ENT:Mercury_CalculateMass() 
+	local mass = tonumber(BREED.Objects[self:GetOBName()].mass_kg) 
+	if mass < 2 then mass = tonumber(BREED.Objects[self:GetOBName()].thrust_kg) end 
+	if mass < 2 then mass = self:BoundingRadius() end 
+	return mass 
+end 
+
+function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint) 
+	local self = IsValid(joint) and joint or self 
+	-- local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, vector_origin, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
+	--[[ 
+	local joint = ents.Create("prop_physics") 
+	if IsValid(joint) then 
+		joint:SetModel("models/blackout.mdl") 
+		joint:SetPos(parentent:GetPos()) 
+		joint:PhysicsInitSphere(joint:BoundingRadius()) 
+		joint:SetSolid(SOLID_NONE) 
+		joint:SetNotSolid(1) 
+		joint:Spawn() 
+		joint:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+		joint:GetPhysicsObject():EnableGravity(0) 
+		joint:SetNotSolid(1) 
+		joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+		parentent.Mercury_entJoint = joint 
+		constraint.Weld(self,joint,0,0,0,true,false) 
+		constraint.NoCollide(self,joint,0,0) 
+		end 
+		--]] 
+	local LPos1 = self:WorldToLocal(parentent:GetPos()) 
+	print(LPos1) 
+	local LPos2 = Vector(0,0,0) 
+	if axis == "X" then 
+	--[[ 
+		-- constraint.Axis(joint,parentent,0,0,joint:GetUp()*joint:BoundingRadius(),parentent:GetUp()*parentent:BoundingRadius(),0,0,0,1) 
+		local LPos1 = Vector(0,parentent:BoundingRadius(),0) 
+		local LPos2 = -LPos1 
+		-- print("lpos2:",LPos2) 
+		-- print("distance:",self:GetPos():Distance(parentent:GetPos())) 
+		-- local LPos2 = Vector(0,1,0) 
+		constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
+		print(parentent:GetOBName(),"used x") -- RD-MISSILEPOD-Y	used x rocket shooter 
+	--]] 
+		print(parentent,parentent:GetOBName(),"using x axis move up and down") 
+		LPos2 = Vector(0,1,0) 
+	end 
+	
+	if axis == "Y" then 
+		-- constraint.Axis(joint,parentent,0,0,joint:GetForward()*joint:BoundingRadius(),parentent:GetForward()*parentent:BoundingRadius(),0,0,0,1) 
+		-- local LPos1 = self:GetPos()-parentent:GetPos() 
+		-- print(self:OBBMins(),self:OBBMaxs(),self:OBBCenter()) 
+		-- local LPos1 = self:OBBCenter() 
+		-- local LPos2 = parentent:GetPos()-self:GetPos() 
+		-- local hingePoint = self:WorldToLocal(parentent:GetPos()) 
+		-- local LPos2 = (hingePoint - parentent:OBBCenter()) 
+		-- local dist = self:GetPos():Distance(parentent:GetPos()) 
+		-- LPos1 = hingePoint 
+		LPos2 = Vector(0,0,1) 
+		-- print("lpos1:",LPos1) 
+		-- print("lpos2:",LPos2) 
+		-- print("distance:",dist) 
+		-- local LPos2 = Vector(0,1,0) 
+		-- constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+		-- constraint.Weld(joint,parentent,0,0,0,true,false) -- weld on physics objects 
+		print(parentent,parentent:GetOBName(),"using y axis move left and right") 
+
+	end 
+	
+	if axis == "Z" then 
+		LPos2 = Vector(1,0,0) 
+	end 
+	constraint.Axis(self,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+	
+end 
+
+function ENT:Mercury_InitWheelAxis(parentent,joint) 
+	local self = IsValid(joint) and joint or self 
+	local length = tonumber(BREED.WheelSettings[parentent.ob_name].travel)*-scalar 
+	local suspension = ents.Create("prop_physics") 
+	-- suspension:SetPos(parentent:GetPos()) 
+	suspension:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
+	suspension:SetModel("models/blackout.mdl") 
+	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
+	suspension:Spawn() 
+	suspension:PhysicsInitBox(suspension:GetModelBounds()) 
+	local phys = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
+	-- parentent:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+	-- if phys then suspension:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()) end 
+	suspension:SetNotSolid(1) 
+	suspension:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+	constraint.Weld(self,suspension,0,0,0,true,false) 
+	if IsValid(self:GetOwner()) then constraint.Weld(self:GetOwner(),suspension,0,0,0,true,false) end 
+	-- parentent:SetPos(parentent:GetPos()+(parentent:GetUp()*-(length))) 
+	parentent:SetPos(suspension:GetPos()+(suspension:GetUp()*-(length))) 
+	-- constraint.Muscle(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-(length*-scalar)),0,0,30,0,0,0,0,"cable/rope",color_white) 
+	-- constraint.Hydraulic(Entity(1),suspension,parentent,0,0,vector_origin,Vector(0,0,-length),length,length,0,0,0,0,"cable/rope",color_white) 
+	-- constraint.Slider(suspension,parentent,0,0,vector_origin,Vector(0,0,-length),30,"cable/rope",color_white) 
+	-- constraint.Weld(suspension,parentent,0,0,0,true,false) 
+	-- constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1) 
+	local LPos1 = suspension:WorldToLocal(parentent:GetPos()) 
+	local LPos2 = Vector(0,1,0) 
+	constraint.Axis(suspension,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+end 
+
+function ENT:Mercury_BaseInitPhysRotation(parentent,joint) 
+	if BREED.Objects[parentent.ob_name].mode == "WHEEL" and BREED.WheelSettings[parentent.ob_name] then 
+		self:Mercury_InitWheelAxis(parentent,joint) 
+	elseif parentent:Mercury_CanRotate() and parentent:Mercury_HasPhysics() and BREED.InputSettings[parentent.ob_name] then 
+		-- get turn axes 
+		local X,Y,Z 
+		for rotMethod, rotTbl in pairs(BREED.InputSettings[parentent.ob_name]) do -- "ANLG_LR" = {"Y", "Z"}	
+			for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
+				X = rotAxis == "X" and rotAxisTbl or nil 
+				Y = rotAxis == "Y" and rotAxisTbl or nil 
+				Z = rotAxis == "Z" and rotAxisTbl or nil 
 			end 
 		end 
+				
+		X = self:Mercury_FixInputLimit(X) 
+		Y = self:Mercury_FixInputLimit(Y) 
+		Z = self:Mercury_FixInputLimit(Z) 
+		if X and !Y and !Z then 
+			self:Mercury_InitAxisMove("X",X,parentent,joint) 
+		elseif !X and Y and !Z then 
+			self:Mercury_InitAxisMove("Y",Y,parentent,joint) 
+		elseif !X and !Y and Z then 
+			self:Mercury_InitAxisMove("Z",Z,parentent,joint) 
+					
+		elseif X and Y and Z then 
+				--[[ 
+					local bone1, bone2, LPos1, LPos2, forcelimit, torquelimit, xmin, ymin, zmin, xmax, ymax, zmax, xfric, yfric, zfric, onlyrotation, nocollide = 0, 0, vector_origin, parentent:GetUp()+parentent:GetForward()+parentent:GetRight(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 
+					if X then 
+						print(parentent, "will use X") 
+						xmin = -tonumber(X.minrot) 
+						xmax = -tonumber(X.maxrot) 
+					end 
+					if Y then 
+						print(parentent, "will use Y") 
+						ymin = -tonumber(Y.minrot) 
+						ymax = -tonumber(Y.maxrot) 
+					end 
+					if Z then 
+						print(parentent, "will use Z") 
+						zmin = -tonumber(Z.minrot) 
+						zmax = -tonumber(Z.maxrot) 
+					end 
+					local joint = ents.Create("prop_physics") 
+					if IsValid(joint) then 
+						joint:SetModel("models/blackout.mdl") 
+						joint:SetPos(parentent:GetPos()) 
+						joint:PhysicsInitSphere(joint:BoundingRadius()) 
+						joint:SetSolid(SOLID_NONE) 
+						joint:SetNotSolid(1) 
+						joint:Spawn() 
+						joint:GetPhysicsObject():SetMass(self:GetPhysicsObject():GetMass()*10) 
+						joint:SetNotSolid(1) 
+						joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+						parentent.Mercury_entJoint = joint 
+						constraint.Weld(self,joint,0,0,0,true,false) 
+						constraint.NoCollide(self,joint,0,0) 
+					end 
+					constraint.AdvBallsocket(joint,parentent,bone1,bone2,LPos1,LPos2,forcelimit,torquelimit,xmin,ymin,zmin,xmax,ymax,zmax,xfric,yfric,zfric,onlyrotation,nocollide) 
+					--]] 
+			print(parentent,"using XYZ rotation!") 
+		else 
+			if IsValid(joint) then 
+				constraint.Weld(joint,parentent,0,0,0,true,false) 
+			else 
+				constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
+			end 
+		end 
+				
+	else -- STATIC OBJECTS 
+		if IsValid(joint) then 
+			constraint.Weld(joint,parentent,0,0,0,true,false) 
+		else 
+			constraint.Weld(self,parentent,0,0,0,true,false) -- weld on physics objects 
+		end 
+	end 
+end 
+
+function ENT:InitSubob() 
+	local subobtbl = BREED.Subob[self.ob_name] 
+	if subobtbl and subobtbl[1] then 
+		for i = 1, #subobtbl do 
+			local fieldname = table.GetKeys(subobtbl[i])[1] -- will return HANGER for BREED.Subob.DROPSHIP.1 
+			local parentent = ents.Create("basemercuryobject") 
+			parentent.ob_name = fieldname 
+			parentent.Mercury_vecLocalPos = (subobtbl[i][fieldname].pos)*scalar -- nearly exact representation of local coordinates used in breed 
+			parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
+			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang)) 
+			parentent:SetKeyValue(keystring,fieldname) -- define object name 
+			parentent:SetSubEnt(self) 
+			table.insert(self.tblsubents,parentent) 
+			local subent = self
+			if IsValid(parentent:GetSubEnt()) and IsValid(parentent:GetSubEnt():GetOwner()) then subent = parentent:GetSubEnt():GetOwner() end 
+			if subent then 
+				parentent:SetOwner(subent) -- this will decide the main entity we are connected to. this will be DROPSHIP entity for every object that DROPSHIP has. 
+			end 
+			if self != parentent:GetOwner() then 
+				table.insert(parentent:GetOwner().tblsubents,parentent) 
+			end 
+			parentent:Spawn() 
+			-- if self:GetMoveType() != MOVETYPE_VPHYSICS then 
+				-- parentent:SetParent(self) 
+			-- end 
+			
+			
+			if self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics() then 
+				print("base ent",self:GetOBName(), "has phys but sub ent",parentent:GetOBName(),"doesn't have physics") 
+				parentent:SetParent(self) 
+			end 
+			
+			if !self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics() then 
+				print("both base ent",self:GetOBName(),"and sub ent",parentent:GetOBName(),"doesn't have physics") 
+				parentent:SetParent(self) 
+			end 
+			
+			if !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				print("base ent",self:GetOBName(),"doesn't have phys but sub ent",parentent:GetOBName(),"has physics. weld those objects with a joint") 
+				local joint = ents.Create("prop_physics") 
+				joint:SetModel("models/blackout.mdl") 
+				joint:SetPos(parentent:GetPos()) 
+				joint:SetParent(self) 
+				joint:PhysicsInitSphere(joint:BoundingRadius()) 
+				joint:SetSolid(SOLID_NONE) 
+				joint:SetNotSolid(1) 
+				joint:Spawn() 
+				joint:GetPhysicsObject():SetMass(self:Mercury_CalculateMass()) 
+				joint:SetNotSolid(1) 
+				joint:SetCollisionGroup(COLLISION_GROUP_WORLD) 
+				self:Mercury_BaseInitPhysRotation(parentent,joint) 
+				-- parentent:SetParent(self) 
+			end 
+			
+			-- if !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				-- parentent:SetParent(self) 
+			-- end 
+			
+			-- if (self:Mercury_HasPhysics() and !parentent:Mercury_HasPhysics()) or !self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				-- parentent:SetParent(self) 
+			-- end 
+			
+			if self:Mercury_HasPhysics() and parentent:Mercury_HasPhysics() then 
+				self:Mercury_BaseInitPhysRotation(parentent) 
+			end 
+		end 
+	end 
+end 
+
+function ENT:Mercury_MoveAllSubToLocalPos() 
+	if BREED.Objects[self:GetOBName()] == "WHEEL" then return false end 
+	if !IsValid(self:GetOwner()) and self.tblsubents then 
+		for k,parentent in pairs(self.tblsubents) do 
+			if IsValid(parentent:GetSubEnt()) then 
+				local self2 = parentent:GetPhysicsObject():IsValid() and parentent:GetPhysicsObject() or parentent 
+				local targetPos = self:LocalToWorld(parentent.Mercury_vecLocalPos) 
+				if self2:GetPos() == targetPos then return false end 
+				print(self2:GetPos(),targetPos)
+				self2:SetPos(targetPos,true) 
+			end 
+		end 
+	end 
+end 
+
+function ENT:Mercury_MoveSubToLocalPos() 
+	if IsValid(self:GetSubEnt()) then 
+		local self2 = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() or self 
+		parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
+		self2:SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),false) 
+	end 
+end 
+
+function ENT:GetCollisionMeshTxt() 
+	if self.ob_name == "DROPSHIP" then return "142dpcollision.mdl.txt" end 
+	local collision_mesh = BREED.Objects[self.ob_name].collision 
+	local modelname = nil 
+	--[[ 
+	if collision_mesh != "0" then 
+		collision_mesh = GetProperIndex(collision_mesh) 
+		modelname = BREED.Models[collision_mesh] 
+		if modelname then 
+			modelname = modelname..".txt" 
+		end 
+	else 
+	--]] 
+		modelname = self:GetModel() 
+		modelname = string.GetFileFromFilename(modelname)..".txt" 
+	-- end 
+	return modelname 
+end 
+
+function ENT:InitMoveType_MultiConvexVehicle() 
+	MsgC(color_white,self.ob_name.." will be multiconvex physics vehicle.\n") 
+	
+	self.breed_collisionmesh = {} 
+	self.breed_collisionmesh.verticies = { } 
+	local model = self:GetModel() 
+	for k,v in pairs(util.GetModelMeshes(model)) do 
+		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
+	end 
+	
+	self:PhysicsFromMesh(self.breed_collisionmesh.verticies) 
+	self:SetSolid(SOLID_VPHYSICS) 
+	self:SetMoveType(MOVETYPE_VPHYSICS) 
+	self:EnableCustomCollisions(true) 
+	self:PhysWake() 
+	return self:GetPhysicsObject() 
+end 
+
+--[[ 
+function ENT:InitMoveType_MultiConvexVehicle() 
+	MsgC(color_white,self.ob_name.." will be multiconvex physics vehicle.\n") 
+	-- if BREED.Objects[self.ob_name].collision == "0" then 
+		-- local modelname = BREED.Models[
+	local txtfile = self:GetCollisionMeshTxt() 
+	local tbltriangles = BREED and BREED.ModelMeshes and BREED.ModelMeshes[txtfile] -- ["110dropship.mdl.txt"] = vertices 
+	if tbltriangles and !table.IsEmpty(tbltriangles) then 
+		-- MsgC(color_white,self.ob_name.." using modelmesh "..tbltriangles .."\n") 
+		self.breed_collisionmesh = {} 
+		MsgC(color_white,"tbltriangles counts up to "..table.Count(tbltriangles).."\n") 
+		for i = 1, table.Count(tbltriangles) do 
+			local v3 = tbltriangles[i] 
+			if collision_mesh_sets == 1 then 
+				self.breed_collisionmesh[i] =	{ 
+				v3,
+				Vector(v3.x,v3.z,v3.y), 
+				Vector(v3.z,v3.x,v3.y), 
+				Vector(v3.z,v3.y,v3.x), 
+				Vector(v3.y,v3.z,v3.x), 
+				Vector(v3.y,v3.x,v3.z), 
+				v3+Vector(0,0,1), 
+				v3+Vector(0,0,-1)
+												} 
+			elseif collision_mesh_sets == 2 then 
+				local test_mins = v3 
+				local test_maxs = -v3 
+				self.breed_collisionmesh[i] =	{ 
+				test_mins,
+				Vector(test_mins.x,test_mins.y,test_maxs.z), 
+				Vector(test_mins.x,test_maxs.y,test_mins.z), 
+				Vector(test_mins.x,test_maxs.y,test_maxs.z), 
+				Vector(test_maxs.x,test_mins.y,test_mins.z), 
+				Vector(test_mins.x,test_mins.y,test_maxs.z), 
+				Vector(test_mins.x,test_maxs.y,test_mins.z), 
+				test_maxs 
+												} 
+			elseif collision_mesh_sets == 3 then 
+				print("using set 3") 
+				local v3_2 = tbltriangles[i+1] 
+				if !v3_2 then break end 
+				local test_mins = v3 
+				local test_maxs = v3_2 
+				self.breed_collisionmesh[i] =	{ 
+				test_mins,
+				Vector(test_mins.x,test_mins.y,test_maxs.z), 
+				Vector(test_mins.x,test_maxs.y,test_mins.z), 
+				Vector(test_mins.x,test_maxs.y,test_maxs.z), 
+				Vector(test_maxs.x,test_mins.y,test_mins.z), 
+				Vector(test_mins.x,test_mins.y,test_maxs.z), 
+				Vector(test_mins.x,test_maxs.y,test_mins.z), 
+				test_maxs 
+													} 
+			end 
+		end 
+		self:PhysicsInitMultiConvex(self.breed_collisionmesh) 
+		self:SetSolid(SOLID_VPHYSICS)	
+		self:SetMoveType(MOVETYPE_VPHYSICS) 
+		self:EnableCustomCollisions(true) 
+		self:PhysWake() 
+	else MsgC(color_white,"Physics object table is empty.\n") 
 	end 
 end 
 --]] 
 
--- filetable_reindex(table) 
--- feed this function with a table full of numerically sorted files 
--- then it will return a new table 
--- which every key is indexed depending on the start of their value 
--- for example: 004earth.mdl will be "4" = "004earth.mdl" 
-local function filetable_reindex(tbl) 
-	local newtbl = {} 
-	for k,v in pairs(tbl) do 
-		local indexnum = string.match(v,"[%d]*") -- the magic that finds if your string starts with num, counts all nums until it encounters non-number 
-		local strindexcount = #indexnum 
-		for i = 1, strindexcount do 
-			if string.StartWith(indexnum,"0") then -- i have a zero at the beginning of filename 
-				indexnum = string.sub(indexnum,2) -- hop over the zero at beginning 
-			else 
-				break 
-			end 
-		end 
-		if #indexnum > 0 then newtbl[indexnum] = v end -- {"110" = "110dropship.mdl"} 
-		-- if #indexnum > 0 then table.insert(newtbl,indexnum,v) end -- this gives unexpected indexing results when we try to return back to older nums
-		-- indexnum > 0 means filename returned empty 
-	end 
-	return newtbl 
-end 
-
-local function readobjectfile(filename) 
-	MsgC(color_white,"Loading object file definitions from "..filename.."\n") 
-	local curfile = nil 
-	if SERVER then 
-		curfile = file.Open(filename,"r","LUA") -- open those files 
-	else 
-		curfile = file.Open(filename,"r","GAME") 
-	end 
-	while !curfile:EndOfFile() do -- loop: work until we reach the end of file 
-		local curstring = curfile:ReadLine() -- read next line 
-		local tableofstrings = string.Explode("%s",curstring,true) -- seperate given line to a table 
-		-- while #tableofstrings[1] == 0 do table.remove(tableofstrings,1) end -- skip empty lines 
-		if #tableofstrings[1] == 0 then table.remove(tableofstrings,1) end 
-		process_mercury_objcmd(tableofstrings) 
-	end 
-	curfile:Close() 
-end 
-
-local function readsoundsfile(filename) 
-	MsgC(color_white,"Loading sound scripts from "..filename.."\n") 
-	local curfile = nil 
-	curfile = file.Open(filename,"r","GAME") 
-	print(curfile) 
-	while !curfile:EndOfFile() do -- loop: work until we reach the end of file 
-		local curstring = curfile:ReadLine() -- read next line 
-		local tableofstrings = string.Explode("%s",curstring,true) -- seperate given line to a table 
-		-- while #tableofstrings[1] == 0 do table.remove(tableofstrings,1) end -- skip empty lines 
-		if #tableofstrings[1] == 0 then table.remove(tableofstrings,1) end 
-		process_mercury_soundfile(tableofstrings) 
-	end 
-	curfile:Close() 
-end 
-
-local function readbreedobjectfiles() -- read all file in lua/objects and create tasks according to given function name 
-	MsgC(color_white,"Loading Scripts\n") 
-	if BREED and BREED.Objects and !table.IsEmpty(BREED.Objects) then MsgC(Color(255,0,0),"Scripting: Tried to load objects while we already have obs defined! Halting. \n") return end 
-	local objects_files = file.Find(filepath.."/*","LUA") -- look for all files in lua/objects 
-	if table.IsEmpty(objects_files) then objects_files = file.Find("lua/"..filepath.."/*","GAME") end  -- case 2 
-	if table.IsEmpty(objects_files) then MsgC(Color(255,0,0),"Scripting: No script file found! Halting.\n") return end 
-	for _,objects_file in pairs(objects_files) do -- do the following for each file in objects 
-		if SERVER then 
-			local filepath2 = filepath.."/"..objects_file
-			if file.Exists(filepath2,"LUA") then -- if those files really exist 
-				readobjectfile(filepath2) 
-			end 
-		else 
-			local filepath2 = "lua/"..filepath.."/"..objects_file 
-			if file.Exists(filepath2,"GAME") then -- if those files really exist 
-				readobjectfile(filepath2) 
-			end 
-		end 
-	end	
-	-- AssignModelPathforIndexes() undo: found a better way 
-end	
-
-local function CreateTriangleDataAndSave() -- clientside only 
-	if SERVER then return end 
-	if !BREED then return end 
-	if !BREED.Models then return end 
-	file.CreateDir("breed") 
-	MsgC(color_white,"Cleaning up old vert data\n") 
-	local files = file.Find("breed/*","DATA") -- retrieve all files 
-	for k,v in pairs(files) do -- each file 
-		file.Write("breed/"..v,"") -- erase data 
-	end 
-	MsgC(color_white,"creating vert data\n") 
-	for k,v in pairs(BREED.Models) do 
-		local modelpath = "models/breed/"..v 
-		local printstring = "" 
-		local modelmeshes = util.GetModelMeshes(modelpath) 
-		for i = 1, #modelmeshes do -- all submodels in mesh 
-			local vertdata = modelmeshes[i].triangles 
-			local tblcount = tobool(table.Count(vertdata) < 16384*2) -- exclude models that have too many polygons 
-			if tblcount then 
-				for key,val in pairs(vertdata) do 
-					printstring = vertdata[key].pos.x.."	"..vertdata[key].pos.y.."	"..vertdata[key].pos.z.."\r\n" 
-					file.Append("breed/"..v..".txt",printstring) -- save only vert positions. x y z. 
-				end 
-			end 
-		end 
-	end 
-end 
 --[[ 
-local function CreateTriangleDataFromSingleMesh() -- old code 
-	print("creating vert data for single model")
-	if SERVER then return end 
-	local modelpath = "models/vehicles/ut99/hyperblast_ship.mdl"
-	if util.IsValidModel(modelpath) then 
-		local newtbl = {} 
-		local vertdata = util.GetModelMeshes(modelpath)[1].triangles 
-		local tblcount = tobool(table.Count(vertdata) < 8192) 
-		print(tblcount) 
-		if tblcount then 
-			for key,val in pairs(vertdata) do 
-				if !newtbl[key] then 
-					newtbl[key] = {} 
+function ENT:InitMoveType_Static() 
+	MsgC(color_white,self.ob_name.." will be physics from mesh entity.\n") 
+	local txtfile = self:GetCollisionMeshTxt() 
+	local tbltriangles = BREED and BREED.ModelMeshes and BREED.ModelMeshes[txtfile] -- ["110dropship.mdl.txt"] = vertices 
+	if tbltriangles and !table.IsEmpty(tbltriangles) then 
+		-- MsgC(color_white,self.ob_name.." using modelmesh "..tbltriangles .."\n") 
+		MsgC(color_white,"tbltriangles counts up to "..table.Count(tbltriangles).."\n") 
+		local VERTICES = {}	
+		for k,v in pairs(tbltriangles) do 
+			table.insert(VERTICES,{pos = Vector(v)}) 
+		end 
+		self:PhysicsFromMesh(VERTICES) 
+		self:SetSolid(SOLID_VPHYSICS)	
+		self:SetMoveType(MOVETYPE_VPHYSICS) 
+		self:GetPhysicsObject():EnableMotion( false ) 
+		self:GetPhysicsObject():SetMass(400000) 
+		self:EnableCustomCollisions(true) 
+	else MsgC(color_white,"Physics object table is empty.\n") 
+	end 
+end 
+--]] 
+
+function ENT:Mercury_VehicleCanSteer() 
+	if !self.tblsubents or self.tblsubents and #self.tblsubents < 1 then return false end 
+	if self.tblsubents then 
+		for k,v in pairs(self.tblsubents) do 
+			if v:Mercury_WheelCanSteer() then return true end -- at least has one steering wheel 
+		end 
+	end 
+end 
+
+function ENT:Mercury_WheelCanSteer() 
+	local WheelSettings = BREED.WheelSettings[self:GetOBName()] 
+	local InputSettings = BREED.InputSettings[self:GetOBName()] 
+	InputSettings = InputSettings and (InputSettings.ANLG_LR or InputSettings.DGTL_LR) or nil 
+	return WheelSettings and WheelSettings.steered and InputSettings and InputSettings.Y and InputSettings.Y.rate and InputSettings.Y.rate != "0" 
+end 
+
+function ENT:InitMoveType_Static() 
+	MsgC(color_white,self.ob_name.." will be physics from mesh entity.\n") 
+	
+	self.breed_collisionmesh = {} 
+	self.breed_collisionmesh.verticies = { } 
+	for k,v in pairs(util.GetModelMeshes(self:GetModel())) do 
+		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
+	end 
+	
+	self:PhysicsFromMesh(self.breed_collisionmesh.verticies) 
+	self:SetSolid(SOLID_VPHYSICS)	
+	self:SetMoveType(MOVETYPE_VPHYSICS) 
+	self:EnableCustomCollisions(true) 
+	local phys = self:GetPhysicsObject() 
+	if phys:IsValid(phys) then 
+		phys:EnableMotion(false) 
+	end 
+	self:PhysWake() 
+	return phys 
+end 
+
+function ENT:InitMoveType() 
+	-- if IsValid(self:GetOwner()) then return end 
+	local mode = BREED.Objects[self.ob_name].mode 
+	local col_type = BREED.Objects[self.ob_name].collision 
+	if mode == "SPACE" or mode == "DRIVE" then 
+		if col_type == "POLY" then 
+			-- self:InitMoveType_MultiConvexVehicle() 
+			self:InitMoveType_Static() 
+		elseif col_type == "BOX" then 
+			self:PhysicsInitBox(self:GetCollisionBounds()) 
+		elseif col_type == "SPHERE" then 
+			self:PhysicsInitSphere(self:BoundingRadius()) 
+		end 
+	-- the rest: static, controller, mzl, mine, head, torso, weapon, weapon_dummy, wheel, jet, biped, space, rotate, rotate_throttle, rotate_manned, turret, door, drive, hover, fly 
+	elseif mode == "WHEEL" then 
+		local scalar = BREED.WheelSettings[self:GetOBName()] 
+		scalar = scalar and scalar.radius 
+		scalar = scalar and scalar != "0" and tonumber(scalar) or 1 
+		self:PhysicsInitSphere(self:BoundingRadius()*scalar) 
+	elseif col_type == "POLY" then 
+		if IsValid(self:InitMoveType_Static()) then self:GetPhysicsObject():EnableMotion(true) end 
+	elseif col_type == "BOX" then 
+		self:PhysicsInitBox(self:GetCollisionBounds()) 
+		self:GetPhysicsObject():EnableMotion( true ) 
+	elseif col_type == "SPHERE" then 
+		self:PhysicsInitSphere(self:BoundingRadius()) 
+		self:GetPhysicsObject():EnableMotion( true ) 
+	elseif mode == "JET" then 
+		self:PhysicsInitBox(self:GetCollisionBounds()) 
+	
+	else 
+		print("OBJECT",self,self.ob_name,"MOVETYPE IS:", col_type) 
+		self:SetSolid(SOLID_NONE) 
+		self:SetMoveType(MOVETYPE_NONE) 
+	end 
+	local phys = self:GetPhysicsObject() 
+	if phys and IsValid(phys) then 
+		local mass = self:Mercury_CalculateMass() 
+		phys:SetMass(mass) 
+		if IsValid(self:GetSubEnt()) then 
+			phys:AddGameFlag(FVPHYSICS_CONSTRAINT_STATIC+FVPHYSICS_MULTIOBJECT_ENTITY+FVPHYSICS_NO_PLAYER_PICKUP+FVPHYSICS_NO_SELF_COLLISIONS) 
+		end 
+	end 
+end 
+
+function ENT:OnTakeDamage(dmginfo) 
+	local m_takedamage = self:GetInternalVariable("m_takedamage") 
+	if m_takedamage == 0 then return 0 end 
+	if m_takedamage == 2 then 
+		self:SetHealth(self:Health() - dmginfo:GetDamage()) 
+	end 
+	if self:Health() < 0 then 
+		self:OnKilled(dmginfo) 
+	end 
+	return dmginfo:GetDamage() 
+end 
+
+function ENT:OnKilled() 
+	local newmesh = BREED.DamageMeshSettings[self:GetOBName()] 
+	if !newmesh then return end 
+	newmesh = GetProperIndex(newmesh) 
+	local modelname = BREED.Models[newmesh] 
+	local modelpath = Model("models/breed/"..BREED.Models[newmesh]) 
+	self:SetModel(modelpath) 
+end 
+
+function ENT:DrawLights() 
+	local light = BREED and BREED.LightSettings and BREED.LightSettings[self:GetOBName()] -- returns you table of all lights of particular object 
+	if light then 
+		for i = 1,table.Count(light) do  
+			local mat = Material( "sprites/blueflare1" ) 
+			-- mat:SetInt("$spriterendermode", 5) 
+			render.SetMaterial( mat ) -- add material option 
+			render.DrawSprite(self:LocalToWorld((light[i].pos)*scalar),light[i].rad,light[i].rad,light[i].color) 
+		end 
+	end 
+end 
+
+function ENT:DrawSprites() -- same as lights 
+	local sprite = BREED and BREED.SpriteSettings and BREED.SpriteSettings[self:GetOBName()] 
+	-- if sprite then print(sprite) end 
+	if sprite then 
+		for i = 1,table.Count(sprite) do 
+			local mat = Material("models/breed/"..BREED.Materials[sprite[i].texindex]) 
+			mat:SetInt("$spriterendermode", 5) 
+			render.SetMaterial( mat ) -- add material option 
+			-- print("sprite at",self:LocalToWorld(sprite[i].pos)*0.35)
+			render.DrawSprite(self:LocalToWorld((sprite[i].pos)*scalar),sprite[i].rad*-scalar,sprite[i].rad*-scalar,sprite[i].color) 
+		end 
+	end 
+end 
+
+function ENT:DrawEmitters() 
+	local emitter = BREED and BREED.EmitterSettings and BREED.EmitterSettings[self:GetOBName()] 
+	if emitter and FrameTime() > 0 and (!self.Mercury_flLastEmit or self.Mercury_flLastEmit and self.Mercury_flLastEmit < CurTime()) then 
+		for i = 1,table.Count(emitter) do
+			self.Mercury_flLastEmit = CurTime() + emitter[i].probabl -- fix probabl 
+			local pos = self:LocalToWorld(emitter[i].position*scalar) 
+			local radius = emitter[i].radius 
+			local emit = ParticleEmitter(pos) 
+			local texture = "models/breed/"..BREED.Materials[emitter[i].texture] 
+			texture = string.sub(texture,1,#texture-4) 
+			texture = Material(texture) 
+				texture:SetInt("$spriterendermode",5) 
+				local emitted = emit:Add(texture,pos) 
+				if emitted then 
+					local velocity = emitter[i].velocity*-10 
+					local scalar = scalar 
+					if BREED.Objects[self:GetOBName()].mode == "JET" then 
+						scalar = scalar * (self:GetThrustRate()*0.01) 
+					end 
+					velocity = velocity * (self:GetThrustRate()*0.01) 
+					velocity:Rotate(self:GetAngles()) 
+					
+					emitted:SetDieTime(emitter[i].life) 
+					emitted:SetStartSize(radius*-scalar) 
+					emitted:SetEndSize((radius*0.9)*-scalar) 
+					local r,g,b = math.random(emitter[i].col1.r,emitter[i].col2.r), math.random(emitter[i].col1.g,emitter[i].col2.g), math.random(emitter[i].col1.b,emitter[i].col2.b) 
+					emitted:SetColor(r,g,b) 
+					emitted:SetVelocity(velocity) 
 				end 
-				newtbl[key].pos = vertdata[key].pos 
+			emit:Finish() 
+		end
+	end 
+end 
+
+function ENT:DrawEnterIcon() 
+	local range = 256 
+	local canEnter = BREED.PilotSettings[self:GetOBName()] -- check whether the pilot table exists 
+	if canEnter then 
+		local enterPos = canEnter.pos*scalar 
+		enterPos = self:LocalToWorld(enterPos) 
+		local distToSeat = LocalPlayer():EyePos():Distance(enterPos) 
+		if distToSeat < range then 
+		cam.Start2D() 
+			local actionIcons = Material("models/breed/903actions_HQ_NOMIP_") 
+			actionIcons = surface.GetTextureID("models/breed/903actions_HQ_NOMIP_") 
+			surface.SetTexture(actionIcons) 
+			surface.SetDrawColor(255, 255, 255, 255) 
+			surface.DrawTexturedRectUV(ScrW()*0.40,ScrH()*0.7,256,256,0,0,0.25,0.25) 
+		cam.End2D() 
+		end 
+		-- print(distToSeat) 
+	end 
+end 
+
+function ENT:Draw() 
+	self:DrawModel() 
+	self:DrawLights() 
+	self:DrawSprites() 
+	self:DrawEmitters() 
+	self:DrawEnterIcon() 
+end 
+
+function ENT:Mercury_RotateThink() 
+	if CLIENT then return end 
+	local obmode = BREED.Objects[self:GetOBName()].mode 
+	local physobj = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() 
+	local inputsettings = BREED.InputSettings[self:GetOBName()] 
+	if (obmode == "ROTATE" or obmode == "ROTATE_THROTTLE" or obmode == "ROTATE_MANNED" or obmode == "TURRET") and inputsettings then 
+		for rotMethod, rotTbl in pairs(inputsettings) do -- -- "ANLG_LR" = {"Y", "Z"}	
+			for rotAxis, rotAxisTbl in pairs(rotTbl) do -- "Y" = { -30, 30, 1200 } 
+				local curAngles = self:GetLocalAngles() 
+				if physobj then 
+					if IsValid(self:GetSubEnt()) then 
+						_,curAngles = WorldToLocal(vector_origin,self:GetSubEnt():GetAngles(),vector_origin,physobj:GetAngles()) 
+					else 
+						_,curAngles = WorldToLocal(vector_origin,self.Mercury_angSpawnAngles,vector_origin,physobj:GetAngles()) 
+					end 
+				end 
+				-- local axis = (rotAxis == "X" and Vector(0,1,0)) or (rotAxis == "Y" and Vector(0,0,1)) or rotAxis == "Z" and Vector(1,0,0) 
+				local axis = (rotAxis == "X" and Vector(0,1,0)) or (rotAxis == "Y" and Vector(0,0,1)) or rotAxis == "Z" and Vector(1,0,0) 
+				local maxrotspeed = rotAxisTbl["rate"] 
+				maxrotspeed = maxrotspeed * 0.1 
+				if obmode == "ROTATE_THROTTLE" and IsValid(self:GetOwner()) then 
+					maxrotspeed = maxrotspeed * self:GetOwner():GetThrustRate() 
+				end 
+				if self.Mercury_bRotationBounce == true then axis = -axis end 
+				curAngles:RotateAroundAxis(axis,maxrotspeed*FrameTime()) 
+				
+				if physobj then 
+					if IsValid(self:GetSubEnt()) then 
+						_,curAngles = LocalToWorld(vector_origin,curAngles,vector_origin,self:GetSubEnt():GetAngles()) 
+					else 
+						_,curAngles = LocalToWorld(vector_origin,curAngles,vector_origin,self.Mercury_angSpawnAngles) 
+					end 
+					-- physobj:SetAngles(curAngles) 
+				else 
+					self:SetLocalAngles(curAngles) 
+				end 
+				-- rotAxis = (rotAxis == "X" and "y") or (rotAxis == "Y" and "z") or rotAxis == "Z" and "x" 
+				-- rotAxis = (rotAxis == "X" and "x") or (rotAxis == "Y" and "y") or rotAxis == "Z" and "z" 
+				rotAxis = string.lower(rotAxis) 
+				-- print("object", self:GetOBName(), curAngles[rotAxis]) 
+				if rotAxisTbl["minrot"] != "X" and curAngles[rotAxis] < -tonumber(rotAxisTbl["minrot"]) then 
+					self.Mercury_bRotationBounce = false 
+				end 
+				
+				if rotAxisTbl["maxrot"] != "X" and curAngles[rotAxis] > -tonumber(rotAxisTbl["maxrot"]) then 
+					self.Mercury_bRotationBounce = true 
+				end 
+				
 			end 
 		end 
-		newtbl = table.ToString(newtbl,modelpath,true) 
-		-- print("all valid so far")
-		file.Write("breed/hyperblast_ship.txt",newtbl) 
 	end 
-
 end 
---]]
 
-local function CreateTriangleDataFromSingleMesh(model) -- new code 
-	print("creating vert data for single model") 
-	local modelpath = Model(model) 
-	if util.IsValidModel(modelpath) then 
-		local newtbl = {} 
-		local modelmeshes = util.GetModelMeshes(modelpath) 
-		for i = 1, #modelmeshes do -- all submodels in mesh 
-			local vertdata = modelmeshes[i].triangles 
-			local tblcount = tobool(table.Count(vertdata) < 16384*2) -- exclude models that have too many polygons 
-			if tblcount then 
-				local printstring = "" 
-				for key,val in pairs(vertdata) do 
-					printstring = vertdata[key].pos.x.."	"..vertdata[key].pos.y.."	"..vertdata[key].pos.z.."\r\n" 
-					file.Append("breed/hyperblast_ship.txt",printstring) -- save only vert positions. x y z. 
+function ENT:Think() 
+	
+	if BREED.PilotSettings[self:GetOBName()] then 
+		local pos = BREED.PilotSettings[self:GetOBName()].pos*scalar 
+		local ejectpos = BREED.PilotSettings[self:GetOBName()].ejectpos 
+		pos = self:LocalToWorld(pos) 
+		ejectpos = self:LocalToWorld(ejectpos) 
+		-- debugoverlay.Axis(pos,self:GetAngles(),20,0.15) 
+		-- debugoverlay.Axis(ejectpos,self:GetAngles(),20,0.15) 
+		-- debugoverlay.Text(pos,"pos",0.15) 
+		-- debugoverlay.Text(ejectpos,"ejectpos",0.15) 
+		
+		local seat = self:GetControllerSeat() 
+		if IsValid(seat) then 
+			local driver = seat:GetDriver() 
+			if IsValid(driver) then 
+				
+				local viewEntity = seat:GetNW2Entity("Mercury_entView") 
+				if !seat.RenderOverride then 
+					seat.RenderOverride = function(self,flags) 
+						local velocity = viewEntity:GetVelocity()*(FrameTime()*2) 
+						local viewPos = BREED.ViewPointSettings[viewEntity:GetOBName()] 
+						viewPos = viewPos and viewEntity:LocalToWorld(viewPos*scalar) or viewEntity:WorldSpaceCenter() 
+						-- print(viewPos) 
+						-- viewPos = viewPos or viewEntity:WorldSpaceCenter() 
+						seat:SetRenderOrigin(viewPos+velocity) 
+						seat:SetRenderAngles(viewEntity:GetAngles()) 
+					end 
 				end 
+				-- if seat.SetRenderOrigin and IsValid(viewEntity) then seat:SetRenderOrigin(viewEntity:GetPos()) end 
+				
+				if driver:KeyDown(IN_FORWARD) and self:GetThrustRate() < 100 then 
+					self:SetThrustRate(self:GetThrustRate()+0.5)
+				end 
+				
+				if driver:KeyDown(IN_BACK) and self:GetThrustRate() > -100 then 
+					self:SetThrustRate(self:GetThrustRate()-0.5) 
+				end 
+				-- print("THROTTLE:",self:GetThrustRate()) 
 			end 
 		end 
+		
 	end 
-end 
+	
+	if BREED.Objects[self:GetOBName()].mode == "JET" then -- i am a jet 
+		local engineThrust = self:GetThrustRate() -- parented to an aircraft 
+		local targetThrust = IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() or engineThrust 
+		local increment = math.Approach(engineThrust,targetThrust,0.5) 
+		self:SetThrustRate(increment) 
+		local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
+		thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
+		if self.SetForce and self.ForceLinear != thrustForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
+	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 then -- a wheel 
+		local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
+		-- Make the wheel spin
+		local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
+		local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
+		local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
+		local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
+		self:GetPhysicsObject():ApplyTorqueCenter(torque) 
+		print("applied torque to",self,"impulse:",impulse,"force:",force,"position:",position,torque,torquelocal) 
+	end 
+	
+	if self:Mercury_CanRotate() then 
+		self:Mercury_RotateThink() 
+	end 
 
-local function DefineModelMeshes() -- this is for PhysicsInitMultiConvex or PhysicsFromMesh 
-	if !SERVER then return end 
-	if BREED and BREED.ModelMeshes then MsgC(color_white,"Refusing to reload model mesh data because they are already loaded. \n") return end 
-	BREED.ModelMeshes				=	{} -- our current table 
-	--	start reading data/breed 
-	local tri_files = file.Find("breed/*","DATA")	
-	for k,v in pairs(tri_files) do 
-	-- read each file 
-		local curfile = file.Open("breed/"..v,"r","DATA")	
-		while !curfile:EndOfFile() and curfile:Size() > 1024 do -- is 1 kb 
-			local curstring = curfile:ReadLine() -- read next line 
-			if !curstring then break end 
-			-- print(curstring,"in file:",v) 
-			local tableofstrings = string.Explode("%s",curstring,true)  -- seperate given line to a table 
-			-- expect three vectors at this point. x, y and z. 
-			local curvector = Vector(tableofstrings[1],tableofstrings[2],tableofstrings[3]) 
-			if !BREED.ModelMeshes[v] then BREED.ModelMeshes[v]	=	{} end -- "110dropshipbody.mdl.txt" 
-			table.insert(BREED.ModelMeshes[v],curvector) -- save vectors to subtable  
+	-- sound scripts 
+	local hasSound = BREED.ObjectSounds[self:GetOBName()] 
+	hasSound = hasSound and hasSound.lpsnd 
+	local obtype = BREED.Objects[self:GetOBName()].mode 
+	if hasSound and hasSound != 0 and BREED.Sounds[hasSound] and !self.LoopSound then 
+		self.LoopSound = CreateSound(self,"BREED."..hasSound) 
+		if obtype == "STATIC" or obtype == "SPACE" or obtype == "DRIVE" or obtype == "JET" then 
+			self.LoopSound:Play() 
 		end 
-		curfile:Close() 
 	end 
+	
+	if self.LoopSound and self.LoopSound:IsPlaying() then 
+		local pitch, volume = BREED.ObjectSounds[self:GetOBName()].pitch, BREED.ObjectSounds[self:GetOBName()].volume 
+		local pitch_mode = BREED.ObjectSounds[self:GetOBName()].pitch_mode 
+		local pitch_min = BREED.ObjectSounds[self:GetOBName()].pitch_min 
+		local pitch_max = BREED.ObjectSounds[self:GetOBName()].pitch_max
+		local volume_mode = BREED.ObjectSounds[self:GetOBName()].volume_mode 
+		local volume_min = BREED.ObjectSounds[self:GetOBName()].volume_min 
+		local volume_max = BREED.ObjectSounds[self:GetOBName()].volume_max 
+		
+		local maxvel = BREED.Objects[self:GetOBName()].maxvel 
+		local thrust_kg = BREED.Objects[self:GetOBName()].thrust_kg 
+		
+		if (obtype == "SPACE" or obtype == "DRIVE") then 
+			if pitch_mode == "VELOCITY" then 
+				-- set pitch depending on object velocity 
+				-- todo: move to clientside and add doppler 
+				local curvel = self:GetVelocity() 
+				if self:GetPhysicsObject():IsValid() then curvel = self:GetPhysicsObject():GetVelocity() end 
+				curvel = curvel:Length() 
+				curvel = curvel/(maxvel*-scalar) 
+				pitch = math.Remap(curvel,0,100,pitch_min,pitch_max) 
+				self.LoopSound:ChangePitch(pitch) 
+			end 
+			
+			-- set volume depending on velocity 
+			
+		elseif obtype == "JET" then 
+			if pitch_mode == "THROTTLE" then 
+				local curvel = self:GetThrustRate() 
+				curvel = math.abs(curvel) 
+				pitch = math.Remap(curvel,0,100,pitch_min,pitch_max) 
+				self.LoopSound:ChangePitch(pitch) 
+			end 
+			
+		end 
+	end 
+	self:NextThink(CurTime()+0.01) 
+	return true 
+	
 end 
 
-BREED.DefineModelMeshes = DefineModelMeshes 
-BREED.FileTable_ReIndex = filetable_reindex 
-BREED.HexColorToColor255 = hexcolortocolor_255 
-BREED.ReadObjectFiles = readbreedobjectfiles 
-MsgC(color_white,"Loading Textures...\n") 
-BREED.Materials = filetable_reindex(file.Find(materialPath.."/*.vmt","GAME")) 
-MsgC(color_white,"Loading Models...\n") 
-BREED.Models = filetable_reindex(file.Find("models/breed/*.mdl","GAME")) 
-MsgC(color_white,"Loading Sounds...\n") 
-BREED.Sounds = filetable_reindex(file.Find(soundPath.."/*.wav","GAME")) 
-readsoundsfile("lua/misc/Sounds.txt") 
-BREED.CreateTriangleDataAndSave = CreateTriangleDataAndSave 
-BREED.CreateTriangleDataFromSingleMesh = CreateTriangleDataFromSingleMesh 
-readbreedobjectfiles() 
+function ENT:Mercury_FindViewPointEnt() 
+	local entBase = IsValid(self:GetOwner()) and self:GetOwner() or self -- our main entity we're connected to 
+	local entSub = IsValid(self:GetSubEnt()) and self:GetSubEnt() or self -- the entity we're parented to 
+	for k,v in pairs(entBase.tblsubents) do 
+		if BREED.Objects[v:GetOBName()].camera == "1" then return v,v:GetOBName() end 
+	end 
+	if BREED.Objects[entSub:GetOBName()].camera == "1" then return entSub,entSub:GetOBName() end 
+	if BREED.Objects[entBase:GetOBName()].camera == "1" then return entBase,entBase:GetOBName() end 
+end 
+
+function ENT:PhysicsSimulate( phys, deltatime ) 
+	
+	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
+
+	-- return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
+	return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION
+end
+
+function ENT:OnRemove() 
+	if self.LoopSound then self.LoopSound:Stop() self.LoopSound = nil end 
+end 
+
+local function Mercury_VehicleViewPoint(apc,ply,tbl) 
+	-- ensure we are in an apc, clientsided 
+	if apc:GetClass() != "prop_vehicle_prisoner_pod" then return end 
+	if !IsValid(ply) and !IsValid(ply:GetVehicle()) and ply:GetVehicle():GetClass() != "prop_vehicle_apc" then return end 
+	local eyeAttachment = apc:LookupAttachment("vehicle_driver_eyes") -- a driver eyepos coordinate already exists 
+	if eyeAttachment != 0 then return end -- skip the hook 
+	-- we're in 
+	local enterTime = apc:GetNWFloat("apc_entertime") 
+	local originalOrigin = ply:EyePos() 
+	local desiredOrigin = apc:WorldSpaceCenter()+(apc:GetUp()*cl_apc_view_upvec:GetFloat()) 
+	local timeDiff = math.Clamp(CurTime() - enterTime,0,1) 
+	local resultOrigin = LerpVector(timeDiff,originalOrigin,desiredOrigin) 
+	-- print(ply:EyePos()) 
+	tbl.origin = resultOrigin 
+	--[[ 
+	-- note: angle fix not needed 
+	-- tbl.angles = apc:GetAngles() + Angle(apc:GetPoseParameter("vehicle_weapon_pitch"),apc:GetPoseParameter("vehicle_weapon_yaw"),0) 
+	local turret_attachment_angles = apc:WorldToLocalAngles(apc:GetAttachment(6).Ang) 
+	-- tbl.angles = apc:GetAngles() + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) -- this works best 
+	-- tbl.angles = ply:LocalEyeAngles() + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) -- this works kinda 
+	local pos2,ang2 = apc:GetVehicleViewPosition() 
+	-- tbl.angles = ang2 + Angle(turret_attachment_angles.x,turret_attachment_angles.y,0) 
+	--]] 
+	-- return tbl 
+end 
+-- hook.Add("CalcVehicleView","prop_vehicle_apc_view_fixer",fix_view) -- client 
+
+

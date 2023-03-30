@@ -44,8 +44,9 @@ function ENT:Initialize()
 	self:InitSubob() 
 	self.Mercury_angSpawnAngles = self:GetLocalAngles() 
 	self.Mercury_bRotationBounce = false 
-	local max = self:OBBMaxs()
-	local min = self:OBBMins()
+	self:StartMotionController() 
+	local max = self:OBBMaxs() 
+	local min = self:OBBMins() 
 	
 	if BREED.Objects[self:GetOBName()].mode == "JET" then 
 		-- self.ThrustOffset = Vector( 0, 0, max.z ) 
@@ -54,7 +55,7 @@ function ENT:Initialize()
 		self.ThrustOffsetR = Vector( min.x, 0, 0 ) 
 		self.ForceAngle = self.ThrustOffset:GetNormalized() * -1 
 		self:SetOffset( self.ThrustOffset ) 
-		self:StartMotionController() 
+		
 	end 
 	
 	if BREED.PilotSettings[self:GetOBName()] then 
@@ -415,8 +416,9 @@ function ENT:InitSubob()
 			local fieldname = table.GetKeys(subobtbl[i])[1] -- will return HANGER for BREED.Subob.DROPSHIP.1 
 			local parentent = ents.Create("basemercuryobject") 
 			parentent.ob_name = fieldname 
-			parentent:SetPos(self:LocalToWorld((subobtbl[i][fieldname].pos)*scalar))	-- nearly exact representation of local coordinates used in breed 
-			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang))	
+			parentent.Mercury_vecLocalPos = (subobtbl[i][fieldname].pos)*scalar -- nearly exact representation of local coordinates used in breed 
+			parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
+			parentent:SetAngles(self:LocalToWorldAngles(subobtbl[i][fieldname].ang)) 
 			parentent:SetKeyValue(keystring,fieldname) -- define object name 
 			parentent:SetSubEnt(self) 
 			table.insert(self.tblsubents,parentent) 
@@ -473,6 +475,29 @@ function ENT:InitSubob()
 				self:Mercury_BaseInitPhysRotation(parentent) 
 			end 
 		end 
+	end 
+end 
+
+function ENT:Mercury_MoveAllSubToLocalPos() 
+	if BREED.Objects[self:GetOBName()] == "WHEEL" then return false end 
+	if !IsValid(self:GetOwner()) and self.tblsubents then 
+		for k,parentent in pairs(self.tblsubents) do 
+			if IsValid(parentent:GetSubEnt()) then 
+				local self2 = parentent:GetPhysicsObject():IsValid() and parentent:GetPhysicsObject() or parentent 
+				local targetPos = self:LocalToWorld(parentent.Mercury_vecLocalPos) 
+				if self2:GetPos() == targetPos then return false end 
+				print(self2:GetPos(),targetPos)
+				self2:SetPos(targetPos,true) 
+			end 
+		end 
+	end 
+end 
+
+function ENT:Mercury_MoveSubToLocalPos() 
+	if IsValid(self:GetSubEnt()) then 
+		local self2 = self:GetPhysicsObject():IsValid() and self:GetPhysicsObject() or self 
+		parentent:SetPos(self:LocalToWorld(parentent.Mercury_vecLocalPos)) 
+		self2:SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),false) 
 	end 
 end 
 
@@ -601,6 +626,22 @@ function ENT:InitMoveType_Static()
 end 
 --]] 
 
+function ENT:Mercury_VehicleCanSteer() 
+	if !self.tblsubents or self.tblsubents and #self.tblsubents < 1 then return false end 
+	if self.tblsubents then 
+		for k,v in pairs(self.tblsubents) do 
+			if v:Mercury_WheelCanSteer() then return true end -- at least has one steering wheel 
+		end 
+	end 
+end 
+
+function ENT:Mercury_WheelCanSteer() 
+	local WheelSettings = BREED.WheelSettings[self:GetOBName()] 
+	local InputSettings = BREED.InputSettings[self:GetOBName()] 
+	InputSettings = InputSettings and (InputSettings.ANLG_LR or InputSettings.DGTL_LR) or nil 
+	return WheelSettings and WheelSettings.steered and InputSettings and InputSettings.Y and InputSettings.Y.rate and InputSettings.Y.rate != "0" 
+end 
+
 function ENT:InitMoveType_Static() 
 	MsgC(color_white,self.ob_name.." will be physics from mesh entity.\n") 
 	
@@ -661,6 +702,9 @@ function ENT:InitMoveType()
 	if phys and IsValid(phys) then 
 		local mass = self:Mercury_CalculateMass() 
 		phys:SetMass(mass) 
+		if IsValid(self:GetSubEnt()) then 
+			phys:AddGameFlag(FVPHYSICS_CONSTRAINT_STATIC+FVPHYSICS_MULTIOBJECT_ENTITY+FVPHYSICS_NO_PLAYER_PICKUP+FVPHYSICS_NO_SELF_COLLISIONS) 
+		end 
 	end 
 end 
 
@@ -827,7 +871,7 @@ function ENT:Mercury_RotateThink()
 end 
 
 function ENT:Think() 
-
+	
 	if BREED.PilotSettings[self:GetOBName()] then 
 		local pos = BREED.PilotSettings[self:GetOBName()].pos*scalar 
 		local ejectpos = BREED.PilotSettings[self:GetOBName()].ejectpos 
@@ -846,8 +890,12 @@ function ENT:Think()
 				local viewEntity = seat:GetNW2Entity("Mercury_entView") 
 				if !seat.RenderOverride then 
 					seat.RenderOverride = function(self,flags) 
-						local velocity = viewEntity:GetVelocity()*FrameTime() 
-						seat:SetRenderOrigin(viewEntity:GetPos()+velocity) 
+						local velocity = viewEntity:GetVelocity()*(FrameTime()*2) 
+						local viewPos = BREED.ViewPointSettings[viewEntity:GetOBName()] 
+						viewPos = viewPos and viewEntity:LocalToWorld(viewPos*scalar) or viewEntity:WorldSpaceCenter() 
+						-- print(viewPos) 
+						-- viewPos = viewPos or viewEntity:WorldSpaceCenter() 
+						seat:SetRenderOrigin(viewPos+velocity) 
 						seat:SetRenderAngles(viewEntity:GetAngles()) 
 					end 
 				end 
@@ -860,7 +908,7 @@ function ENT:Think()
 				if driver:KeyDown(IN_BACK) and self:GetThrustRate() > -100 then 
 					self:SetThrustRate(self:GetThrustRate()-0.5) 
 				end 
-				print("THROTTLE:",self:GetThrustRate()) 
+				-- print("THROTTLE:",self:GetThrustRate()) 
 			end 
 		end 
 		
@@ -873,8 +921,8 @@ function ENT:Think()
 		self:SetThrustRate(increment) 
 		local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
 		thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
-		if self.SetForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
-	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 then 
+		if self.SetForce and self.ForceLinear != thrustForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
+	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 then -- a wheel 
 		local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
 		-- Make the wheel spin
 		local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
@@ -943,16 +991,20 @@ end
 
 function ENT:Mercury_FindViewPointEnt() 
 	local entBase = IsValid(self:GetOwner()) and self:GetOwner() or self -- our main entity we're connected to 
-	local entSub = self:GetSubEnt() -- the entity we're parented to 
+	local entSub = IsValid(self:GetSubEnt()) and self:GetSubEnt() or self -- the entity we're parented to 
 	for k,v in pairs(entBase.tblsubents) do 
-		if BREED.Objects[v:GetOBName()].camera then return v,v:GetOBName() end 
+		if BREED.Objects[v:GetOBName()].camera == "1" then return v,v:GetOBName() end 
 	end 
+	if BREED.Objects[entSub:GetOBName()].camera == "1" then return entSub,entSub:GetOBName() end 
+	if BREED.Objects[entBase:GetOBName()].camera == "1" then return entBase,entBase:GetOBName() end 
 end 
 
 function ENT:PhysicsSimulate( phys, deltatime ) 
+	
 	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
 
-	return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
+	-- return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
+	return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION
 end
 
 function ENT:OnRemove() 

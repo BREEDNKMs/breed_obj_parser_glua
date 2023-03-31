@@ -13,6 +13,11 @@ ENT.PrintName		= "Mercury Entity"
 ENT.Author			= "DevilHawk" 
 ENT.Spawnable		= false 
 
+-- GetProperIndex 
+-- Purpose: This function is used to remove leading zeros from a string. 
+-- Inputs: A string (str). 
+-- Outputs: A modified string (newstr) with leading zeros removed. 
+
 local function GetProperIndex(str) 
 	local strindexcount = #str 
 	local newstr = str 
@@ -39,11 +44,18 @@ function ENT:Initialize()
 	self:SetHealth(BREED.Objects[self.ob_name].damage) 
 	self:SetMaxHealth(self:Health()) 
 	self:SetRenderMode(RENDERMODE_TRANSALPHA) 
+	self:SetUseType(SIMPLE_USE) 
 	self:InitMoveType() 
 	-- then start welding 
 	self:InitSubob() 
+	
+	if !IsValid(self:GetOwner()) and self:GetPhysicsObject():IsValid() and BREED.Objects[self:GetOBName()].mode == "STATIC" then -- base entity without movement, lock movement for optimization 
+		self:GetPhysicsObject():EnableMotion(false) 
+	end 
+	
 	self.Mercury_angSpawnAngles = self:GetLocalAngles() 
 	self.Mercury_bRotationBounce = false 
+	self.Mercury_iNextMuzzle = 1 
 	self:StartMotionController() 
 	local max = self:OBBMaxs() 
 	local min = self:OBBMins() 
@@ -69,7 +81,9 @@ function ENT:Initialize()
 end 
 
 function ENT:SetupDataTables() 
-	self:NetworkVar("String",0,"OBName") 
+	self:NetworkVar("Angle",0,"RotationAngle") 
+	self:NetworkVar("String",0,"OBName",{"KeyName","object"}) -- Allows the NetworkVar to be set using Entity:SetKeyValue. 
+	self:NetworkVar("String",1,"SubMode") 
 	self:NetworkVar("Entity",0,"SubEnt") 
 	self:NetworkVar("Entity",1,"ControllerSeat") 
 	self:NetworkVar("Float",0,"ThrustRate") 
@@ -82,7 +96,7 @@ function ENT:InitializeSeat()
 	local pod = ents.Create("prop_vehicle_prisoner_pod") 
 	if !IsValid(pod) then return end 
 	pod:SetPos(pos) 
-	pod:SetAngles(self:GetAngles()) 
+	pod:SetAngles(self:GetAngles()-Angle(0,180,0)) 
 	pod:SetParent(self) 
 	pod:SetModel("models/weapons/ar2_grenade.mdl") 
 	pod:SetRenderMode(1) 
@@ -92,12 +106,13 @@ function ENT:InitializeSeat()
 	pod:SetKeyValue("vehiclescript","scripts/vehicles/prisoner_pod.txt") 
 	pod:SetKeyValue("limitview",0) 
 	pod:Spawn() 
+	pod:Activate() 
 	pod:SetMoveType(MOVETYPE_NONE) 
 	pod:SetNotSolid(1) 
 	self:SetControllerSeat(pod) 
 	pod:SetNW2Entity("Mercury_entParent",self) 
 	local viewEntity = self:Mercury_FindViewPointEnt() 
-	print("viewEntity is:",viewEntity) 
+	MsgC(color_white,"viewEntity is: "..tostring(viewEntity).." ".. viewEntity:GetOBName().." \n") 
 	-- if IsValid(viewEntity) then driver:SetViewEntity(viewEntity) end 
 	pod:SetNW2Entity("Mercury_entView",viewEntity) 
 end 
@@ -187,6 +202,27 @@ function ENT:Mercury_TranslateMeshIndex(meshindex)
 	return meshindex 
 end 
 
+function ENT:Mercury_FindParentEntity(mode) 
+	local resultEnt = NULL 
+	local parent = self:GetSubEnt() -- means get our branch 
+	if IsValid(parent) then 
+		MsgC(color_white,"checking "..tostring(parent).. " "..parent:GetOBName().."\n") 
+		local parentSub = parent:GetSubMode() 
+		if parentSub != mode then 
+			resultEnt = parent:Mercury_FindParentEntity(mode) 
+		else 
+			resultEnt = parent 
+		end 
+	end 
+	if IsValid(resultEnt) then 
+		return resultEnt, resultEnt:GetOBName() 
+	end 
+end 
+
+-- ENT.InitModel 
+-- Purpose: Properly assign a model to a Mercury object. 
+-- Input: - 
+-- Output: - 
 function ENT:InitModel() 
 	print("OBJECT NAME:", self.ob_name) 
 	local meshindex = BREED.Objects[self.ob_name].mesh 
@@ -220,6 +256,11 @@ function ENT:Mercury_CanRotate()
 	return mode == "TURRET" or mode == "ROTATE" or mode == "JET" or mode == "ROTATE_THROTTLE" or mode == "WHEEL" or mode == "ROTATE_MANNED", mode 
 end 
 
+-- ENT.Mercury_FixInputLimit 
+-- Purpose: Replaces "X" from InputSettings with 180 degrees  
+-- Input: 'inputdata' - a table containing the limit values for an entity's rotation. 
+-- Output: 'newdata' - a table containing the corrected limit values for the entity's rotation. If 'inputdata' is nil, the function returns nil 
+
 function ENT:Mercury_FixInputLimit(inputdata) 
 	if !inputdata then return nil end 
 	local newdata = table.Copy(inputdata) 
@@ -228,12 +269,22 @@ function ENT:Mercury_FixInputLimit(inputdata)
 	return newdata 
 end 
 
+-- ENT.Mercury_CalculateMass 
+-- Purpose: Calculate the mass of an entity in the game. 
+-- Input: - 
+-- Output: A numerical value representing the mass of the entity. 
+
 function ENT:Mercury_CalculateMass() 
 	local mass = tonumber(BREED.Objects[self:GetOBName()].mass_kg) 
 	if mass < 2 then mass = tonumber(BREED.Objects[self:GetOBName()].thrust_kg) end 
 	if mass < 2 then mass = self:BoundingRadius() end 
 	return mass 
 end 
+
+-- ENT.Mercury_InitAxisMove 
+-- Purpose: This function initializes an axis movement constraint between two entities in the game world.
+-- Input: The inputs to this function are the axis to move on, axis data, the parent entity, and the joint. 
+-- Output: - 
 
 function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint) 
 	local self = IsValid(joint) and joint or self 
@@ -303,9 +354,18 @@ function ENT:Mercury_InitAxisMove(axis,axisdata,parentent,joint)
 	
 end 
 
+-- ENT.Mercury_CalculateSuspensionPos 
+-- Purpose: Calculates suspension position used by Mercury wheels 
+-- Input: 1- Entity: Wheel or joint. 2- Length: Length data from WheelSettings. 
+-- Output: Global Vector 
 function ENT:Mercury_CalculateSuspensionPos(parentent,length) 
 	return parentent:GetPos()+(parentent:GetUp()*-(length))
 end 
+
+-- ENT.Mercury_InitWheelAxis 
+-- Purpose: Initializes a wheel axis on a suspension point, for a Garry's Mod entity.
+-- Input: parentent (Entity), joint (optional entity)
+-- Output: - 
 
 function ENT:Mercury_InitWheelAxis(parentent,joint) 
 	local self = IsValid(joint) and joint or self 
@@ -335,8 +395,19 @@ function ENT:Mercury_InitWheelAxis(parentent,joint)
 	-- constraint.Axis(suspension,parentent,0,0,suspension:GetRight()*suspension:BoundingRadius(),parentent:GetRight()*parentent:BoundingRadius(),0,0,0,1) 
 	local LPos1 = suspension:WorldToLocal(parentent:GetPos()) 
 	local LPos2 = Vector(0,1,0) 
-	constraint.Axis(suspension,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+	if BREED.WheelSettings[parentent:GetOBName()] and tonumber(BREED.WheelSettings[parentent:GetOBName()].rotate) > 0 then 
+		constraint.Axis(suspension,parentent,0,0,LPos1,LPos2,0,0,0,1) 
+	else 
+		constraint.Weld(suspension,parentent,0,0,0,true,true) 
+	end 
 end 
+
+-- ENT.Mercury_BaseInitPhysRotation
+-- Purpose: This function initializes the physics rotation of an entity based on its properties and settings.
+-- Input: 
+-- 1- parentent: the parent entity that is going to be rotated. 
+-- 2- joint (optional): the joint entity that connects the parent entity to another entity.
+-- Output: - 
 
 function ENT:Mercury_BaseInitPhysRotation(parentent,joint) 
 	if BREED.Objects[parentent.ob_name].mode == "WHEEL" and BREED.WheelSettings[parentent.ob_name] then 
@@ -415,6 +486,11 @@ function ENT:Mercury_BaseInitPhysRotation(parentent,joint)
 	end 
 end 
 
+-- ENT.InitSubob 
+-- Purpose: Initialize sub-objects for an entity. 
+-- Input: None. 
+-- Output: None. 
+
 function ENT:InitSubob() 
 	local subobtbl = BREED.Subob[self.ob_name] 
 	if subobtbl and subobtbl[1] then 
@@ -428,6 +504,7 @@ function ENT:InitSubob()
 			parentent:SetAngles(self:LocalToWorldAngles(parentent.Mercury_vecLocalAng)) 
 			parentent:SetKeyValue(keystring,fieldname) -- define object name 
 			parentent:SetSubEnt(self) 
+			parentent:SetSubMode(subobtbl[i][fieldname].mode) 
 			table.insert(self.tblsubents,parentent) 
 			local subent = self
 			if IsValid(parentent:GetSubEnt()) and IsValid(parentent:GetSubEnt():GetOwner()) then subent = parentent:GetSubEnt():GetOwner() end 
@@ -493,14 +570,17 @@ function ENT:InitSubob()
 end 
 
 function ENT:Mercury_MoveAllSubToLocalPos() 
+	-- Move all the sub-entities attached to the parent entity to their respective local positions. 
+	-- This function is called repeatedly to ensure that the sub-entities are always in their correct positions. 
 	if !IsValid(self:GetOwner()) and self.tblsubents then 
-		for k,parentent in pairs(self.tblsubents) do 
-			if IsValid(parentent:GetSubEnt()) then 
-				local self2 = parentent:GetPhysicsObject():IsValid() and parentent:GetPhysicsObject() or parentent 
-				local targetPos = self:LocalToWorld(parentent.Mercury_vecLocalPos) 
-				if self2:GetPos() == targetPos then return false end 
-				print(self2:GetPos(),targetPos)
-				self2:SetPos(targetPos,true) 
+	-- Check whether we're not the base entity and if there are any sub-entities attached to ourselves.
+	-- If either of these conditions is not met, the function terminates.
+		for k,parentent in pairs(self.tblsubents) do -- Loop through each sub-entity attached to the parent entity. 
+			if IsValid(parentent:GetSubEnt()) then -- Check if the sub-entity in our table is valid. 
+				local self2 = parentent:GetPhysicsObject():IsValid() and parentent:GetPhysicsObject() or parentent -- Get the physics object of the sub-entity if it exists, otherwise use the sub-entity itself. 
+				local targetPos = self:LocalToWorld(parentent.Mercury_vecLocalPos) -- Calculate the local position of the sub-entity relative to the parent entity. 
+				if self2:GetPos() == targetPos then return false end -- If the sub-entity is already at its target position, terminate the function. 
+				self2:SetPos(targetPos,true) -- Move the sub-entity to its target position. 
 			end 
 		end 
 	end 
@@ -682,7 +762,7 @@ function ENT:InitMoveType_Static()
 	self:EnableCustomCollisions(true) 
 	local phys = self:GetPhysicsObject() 
 	if phys:IsValid(phys) then 
-		phys:EnableMotion(false) 
+		phys:EnableMotion(true) 
 	end 
 	self:PhysWake() 
 	return phys 
@@ -708,7 +788,9 @@ function ENT:InitMoveType()
 		scalar = scalar and scalar != "0" and tonumber(scalar) or 1 
 		self:PhysicsInitSphere(self:BoundingRadius()*scalar) 
 	elseif col_type == "POLY" then 
-		if IsValid(self:InitMoveType_Static()) then self:GetPhysicsObject():EnableMotion(true) end 
+		if IsValid(self:InitMoveType_Static()) then 
+			self:GetPhysicsObject():EnableMotion(true) 
+		end 
 	elseif col_type == "BOX" then 
 		self:PhysicsInitBox(self:GetCollisionBounds()) 
 		self:GetPhysicsObject():EnableMotion( true ) 
@@ -717,6 +799,7 @@ function ENT:InitMoveType()
 		self:GetPhysicsObject():EnableMotion( true ) 
 	elseif mode == "JET" then 
 		self:PhysicsInitBox(self:GetCollisionBounds()) 
+		self:GetPhysicsObject():EnableMotion( true ) 
 	
 	else 
 		print("OBJECT",self,self.ob_name,"MOVETYPE IS:", col_type) 
@@ -780,7 +863,7 @@ function ENT:DrawSprites() -- same as lights
 	end 
 end 
 
-function ENT:DrawEmitters() 
+function ENT:DrawEmitters() -- similar to lights and sprites 
 	local emitter = BREED and BREED.EmitterSettings and BREED.EmitterSettings[self:GetOBName()] 
 	if emitter and FrameTime() > 0 and (!self.Mercury_flLastEmit or self.Mercury_flLastEmit and self.Mercury_flLastEmit < CurTime()) then 
 		for i = 1,table.Count(emitter) do
@@ -817,6 +900,7 @@ end
 function ENT:DrawEnterIcon() 
 	local range = 256 
 	local canEnter = BREED.PilotSettings[self:GetOBName()] -- check whether the pilot table exists 
+	if LocalPlayer():InVehicle() then return end 
 	if canEnter then 
 		local enterPos = canEnter.pos*scalar 
 		enterPos = self:LocalToWorld(enterPos) 
@@ -895,6 +979,28 @@ function ENT:Mercury_RotateThink()
 	end 
 end 
 
+function ENT:Mercury_JetThink() 
+
+	local engineThrust = self:GetThrustRate() -- parented to an aircraft 
+	local targetThrust = IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() or engineThrust 
+	local increment = math.Approach(engineThrust,targetThrust,0.5) 
+	self:SetThrustRate(increment) 
+	local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
+	thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
+	if self.SetForce and self.ForceLinear != thrustForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
+end 
+
+function ENT:Mercury_WheelThink() 
+	local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
+	-- Make the wheel spin
+	local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
+	local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
+	local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
+	local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
+	self:GetPhysicsObject():ApplyTorqueCenter(torque) 
+	-- print("applied torque to",self,"impulse:",impulse,"force:",force,"position:",position,torque,torquelocal) 
+end 
+
 function ENT:Think() 
 	
 	if BREED.PilotSettings[self:GetOBName()] then 
@@ -913,15 +1019,24 @@ function ENT:Think()
 			if IsValid(driver) then 
 				
 				local viewEntity = seat:GetNW2Entity("Mercury_entView") 
+				-- print(viewEntity:GetOBName()) 
+				-- print(viewEntity:GetAngles()) 
+				-- local viewAngles = viewEntity:GetLocalAngles() 
+				-- viewAngles.x = -viewAngles.x 
+				-- viewAngles.y = 0 
+				-- viewAngles.z = -viewAngles.z 
+				
+				-- if SERVER then driver:SetEyeAngles(viewAngles) end 
 				if !seat.RenderOverride then 
-					seat.RenderOverride = function(self,flags) 
+					seat.RenderOverride = function() 
 						local velocity = viewEntity:GetVelocity()*(FrameTime()*2) 
 						local viewPos = BREED.ViewPointSettings[viewEntity:GetOBName()] 
 						viewPos = viewPos and viewEntity:LocalToWorld(viewPos*scalar) or viewEntity:WorldSpaceCenter() 
 						-- print(viewPos) 
 						-- viewPos = viewPos or viewEntity:WorldSpaceCenter() 
 						seat:SetRenderOrigin(viewPos+velocity) 
-						seat:SetRenderAngles(viewEntity:GetAngles()) 
+						-- seat:SetRenderAngles(viewEntity:GetAngles()+Angle(0,180,0)) 
+						-- LocalPlayer():SetEyeAngles(self:GetAngles()) 
 					end 
 				end 
 				-- if seat.SetRenderOrigin and IsValid(viewEntity) then seat:SetRenderOrigin(viewEntity:GetPos()) end 
@@ -940,25 +1055,13 @@ function ENT:Think()
 	end 
 	
 	if BREED.Objects[self:GetOBName()].mode == "JET" then -- i am a jet 
-		local engineThrust = self:GetThrustRate() -- parented to an aircraft 
-		local targetThrust = IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() or engineThrust 
-		local increment = math.Approach(engineThrust,targetThrust,0.5) 
-		self:SetThrustRate(increment) 
-		local thrustForce = BREED.Objects[self:GetOBName()].thrust_kg 
-		thrustForce = thrustForce * (self:GetThrustRate()*0.01) 
-		if self.SetForce and self.ForceLinear != thrustForce then self:SetForce(thrustForce,self:Mercury_GetForceMultiplier()) end 
-	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 then -- a wheel 
-		local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
-		-- Make the wheel spin
-		local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
-		local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
-		local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
-		local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
-		self:GetPhysicsObject():ApplyTorqueCenter(torque) 
-		print("applied torque to",self,"impulse:",impulse,"force:",force,"position:",position,torque,torquelocal) 
+		self:Mercury_JetThink() 
+		
+	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 and BREED.WheelSettings[self:GetOBName()] and tonumber(BREED.WheelSettings[self:GetOBName()].rotate) > 0 then -- a wheel 
+		self:Mercury_WheelThink() 
 	end 
 	
-	if self:Mercury_CanRotate() then 
+	if self:Mercury_CanRotate() then -- except wheels 
 		self:Mercury_RotateThink() 
 	end 
 
@@ -1014,20 +1117,33 @@ function ENT:Think()
 	
 end 
 
+-- ENT.Mercury_FindViewPointEnt 
+-- input: self 
+-- output: 1- Entity: Object to use as viewpoint. 2- Entity OBJECT Name. 
 function ENT:Mercury_FindViewPointEnt() 
-	local entBase = IsValid(self:GetOwner()) and self:GetOwner() or self -- our main entity we're connected to 
-	local entSub = IsValid(self:GetSubEnt()) and self:GetSubEnt() or self -- the entity we're parented to 
-	for k,v in pairs(entBase.tblsubents) do 
+	local newEnt = self:Mercury_FindParentEntity("NEW") -- our main entity we're connected to 
+	if !IsValid(newEnt) then newEnt = self:GetOwner() end 
+	if !IsValid(newEnt) then newEnt = self end 
+	if BREED.Objects[newEnt:GetOBName()].camera == "1" then return newEnt,newEnt:GetOBName() end 
+	for k,v in pairs(newEnt.tblsubents) do 
 		if BREED.Objects[v:GetOBName()].camera == "1" then return v,v:GetOBName() end 
 	end 
-	if BREED.Objects[entSub:GetOBName()].camera == "1" then return entSub,entSub:GetOBName() end 
-	if BREED.Objects[entBase:GetOBName()].camera == "1" then return entBase,entBase:GetOBName() end 
+end 
+
+function ENT:Mercury_VehicleEnter(ply,seat) 
+	-- emit starting sound 
+	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  
+	local sndIndex = BREED.ObjectSounds[mainEnt:GetOBName()] 
+	sndIndex = sndIndex and sndIndex.start or 0 
+	self:EmitSound("BREED."..sndIndex) 
+	
 end 
 
 function ENT:PhysicsSimulate( phys, deltatime ) 
-
+	
+	-- for non-phys to phys parents: force sub entity to move to parent entity's weld position 
 	if IsValid(self.Mercury_entJoint) then 
-		print(self.Mercury_entJoint:GetAngles()) 
+		-- print(self.Mercury_entJoint:GetAngles()) 
 		-- self2:SetPos() 
 		self.Mercury_entJoint:GetPhysicsObject():SetPos(self:GetSubEnt():LocalToWorld(self.Mercury_vecLocalPos),true) 
 		self.Mercury_entJoint:GetPhysicsObject():SetAngles(self:GetAngles()) 
@@ -1042,15 +1158,41 @@ function ENT:PhysicsSimulate( phys, deltatime )
 		self:GetPhysicsObject():SetAngleVelocityInstantaneous(Vector(0,0,0)) 
 		self:Mercury_ForceAngleToJoint() 
 	end 
-
+	
 	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
 
+	-- jet propulsion, copied from Gmod Thrusters 
 	-- return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
 	return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION
 end
 
 function ENT:OnRemove() 
 	if self.LoopSound then self.LoopSound:Stop() self.LoopSound = nil end 
+end 
+
+function ENT:Use(activator,caller,useType,value) 
+	if !IsValid(activator) or IsValid(activator) and !activator:IsPlayer() then return false end 
+	-- if value != 0 then self:Mercury_VehicleEnter(activator) return end 
+	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or nil 
+	local closestEnt = nil 
+    local closestDist = math.huge 
+	local eyePos = activator:EyePos() 
+	for k,v in pairs(ents.FindByClass("prop_vehicle_prisoner_pod")) do 
+		if IsValid(v) and IsValid(v:GetNW2Entity("Mercury_entParent")) then -- find closest vehicle seat to player 
+			local dist = eyePos:DistToSqr(v:EyePos()) 
+			if dist < closestDist then 
+				closestEnt = v 
+				closestDist = dist 
+			end 
+		end 
+	end 
+
+	if IsValid(closestEnt) then 
+		-- print(closestEnt) 
+		closestEnt:Fire("entervehicle","",0,activator,activator) 
+		closestEnt:GetNW2Entity("Mercury_entParent"):Mercury_VehicleEnter(activator,closestEnt) 
+	end 
+
 end 
 
 local function Mercury_VehicleViewPoint(apc,ply,tbl) 

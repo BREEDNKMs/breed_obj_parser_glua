@@ -13,6 +13,7 @@ BREED.ApproachSettings			=	{}
 BREED.CameraSettings			=	{} 
 BREED.CharacterSettings			=	{} 
 BREED.CollisionSphereSettings	=	{} 
+BREED.CollisionMeshes			=	{} 
 BREED.DamagePosSettings			=	{} -- where smokes emit as we take damage 
 BREED.DamageMeshSettings		=	{} 
 BREED.DamageMultiplierSetting	=	{}	
@@ -536,9 +537,9 @@ local function DefineSoundScript(obj) -- to be completed
 -- #REM	SAMPLE	PITCH VARIANCE%	VOLUME VARIANCE%	VOLUME	FALLOFF (M)	
 -- #SAMPLE	1	0	0	100	50	
 	local samplenum = obj[2] -- sample number 
-	-- obj[4] is volume variance, but cannot be defined in soundscripts 
+	-- TODO: obj[4] is volume variance, but cannot be defined in soundscripts 
 
-	local soundFile = BREED.Sounds[samplenum] 
+	local soundFile = BREED.Sounds[samplenum] -- sound is existing and cached, use it 
 	if   soundFile then soundFile = Sound("breed/"..soundFile) 
 	else soundFile = "common/null.wav" end 
 
@@ -546,7 +547,7 @@ local function DefineSoundScript(obj) -- to be completed
 	{ 
 		name = "BREED."..samplenum, 
 		channel = CHAN_AUTO, 
-		volume = obj[5]*0.01, 
+		volume = obj[5]*0.01, --- 100 to 1 
 		level = obj[6], 
 		pitch = {100+obj[3],100-obj[3]}, 
 
@@ -625,6 +626,27 @@ local function process_mercury_soundfile(tbl) -- completed
 	end 
 end 
 
+local function process_mercury_meshadjustmentfile(tbl) -- completed 
+	if tbl[1] == "#REM" then 
+		 
+	elseif tbl[1] == "#vis_boost" then -- defines the multiplier of object render distance 
+		-- DefineVisBoost(tbl) 
+	elseif tbl[1] == "#size" then -- scale the model by given value 
+	elseif tbl[1] == "#xyz_scale" then -- scale the model xyz render separately by given value 
+	elseif tbl[1] == "#detail" then -- detail textures to apply to the model 
+	elseif tbl[1] == "#uv_scale" then -- idk 
+	elseif tbl[1] == "#reflect" then -- idk 
+	elseif tbl[1] == "#lores" then -- lod mesh to use 
+	elseif tbl[1] == "#no_lod" then -- prevents use of lod mesh 
+	elseif tbl[1] == "#centre" then -- idk 
+	elseif tbl[1] == "#shadow" then -- shadow mesh to use  
+	elseif tbl[1] == "#collision" or tbl[1] == "#char_collision" then -- collision mesh to use instead of original collision mesh 
+		BREED.CollisionMeshes[tbl[2]]	=	tbl[3] 
+	
+	-- else MsgC(color_white,"Unknown command:"..tbl[1].."\n") 
+	end 
+end 
+
 --[[ 
 -- UNDONE: NO NEED TO USE THIS 
 local function AssignModelPathforIndexes() 
@@ -697,13 +719,26 @@ local function readsoundsfile(filename)
 	MsgC(color_white,"Loading sound scripts from "..filename.."\n") 
 	local curfile = nil 
 	curfile = file.Open(filename,"r","GAME") 
-	print(curfile) 
 	while !curfile:EndOfFile() do -- loop: work until we reach the end of file 
 		local curstring = curfile:ReadLine() -- read next line 
 		local tableofstrings = string.Explode("%s",curstring,true) -- seperate given line to a table 
 		-- while #tableofstrings[1] == 0 do table.remove(tableofstrings,1) end -- skip empty lines 
 		if #tableofstrings[1] == 0 then table.remove(tableofstrings,1) end 
 		process_mercury_soundfile(tableofstrings) 
+	end 
+	curfile:Close() 
+end 
+
+local function readmeshadjustmentfile(filename) 
+	MsgC(color_white,"Loading mesh adjustment data from "..filename.."\n") 
+	local curfile = nil 
+	curfile = file.Open(filename,"r","GAME")  
+	while !curfile:EndOfFile() do -- loop: work until we reach the end of file 
+		local curstring = curfile:ReadLine() -- read next line 
+		local tableofstrings = string.Explode("%s",curstring,true) -- seperate given line to a table 
+		-- while #tableofstrings[1] == 0 do table.remove(tableofstrings,1) end -- skip empty lines 
+		if #tableofstrings[1] == 0 then table.remove(tableofstrings,1) end 
+		process_mercury_meshadjustmentfile(tableofstrings) 
 	end 
 	curfile:Close() 
 end 
@@ -837,6 +872,7 @@ BREED.Models = filetable_reindex(file.Find("models/breed/*.mdl","GAME"))
 MsgC(color_white,"Loading Sounds...\n") 
 BREED.Sounds = filetable_reindex(file.Find(soundPath.."/*.wav","GAME")) 
 readsoundsfile("lua/misc/Sounds.txt") 
+readmeshadjustmentfile("lua/misc/MeshHelp.txt") 
 BREED.CreateTriangleDataAndSave = CreateTriangleDataAndSave 
 BREED.CreateTriangleDataFromSingleMesh = CreateTriangleDataFromSingleMesh 
 readbreedobjectfiles() 

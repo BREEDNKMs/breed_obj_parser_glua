@@ -197,9 +197,38 @@ function ENT:InitModel()
 end 
 --]] 
 
-function ENT:Mercury_TranslateMeshIndex(meshindex) 
-	if meshindex == 110 then return 142 end 
+function ENT:Mercury_TranslateMeshIndex(meshindex) -- translates the mesh index to a collision mesh index replacement 
+	-- if meshindex == 110 then return 142 end 
+	meshindex = BREED.CollisionMeshes[meshindex] or meshindex -- return the same mesh if we don't have any appropriate replacement 
 	return meshindex 
+end 
+
+function ENT:CheckEntityConvexity(entity) 
+	if !IsValid(entity) then entity = self end 
+    local physObj = entity:GetPhysicsObject() 
+    if !physObj:IsValid() then return end 
+    
+    local convexes = physObj:GetMeshConvexes() 
+    for _, convex in ipairs(convexes) do 
+        for i = 1, #convex do 
+            if i % 3 == 1 then 
+                local v1, v2, v3 = convex[i].pos, convex[i+1].pos, convex[i+2].pos 
+                local crossProduct = (v2 - v1):Cross(v3 - v1) 
+                for j = 1, #convex do 
+                    if j != i and j != i+1 and j != i+2 then 
+                        local vertex = convex[j].pos 
+						-- print(vertex) 
+						-- print((vertex - v1):Dot(crossProduct)) 
+                        if (vertex - v1):Dot(crossProduct) > 0 then 
+                            return false -- a concave vertex was found 
+                        end 
+                    end 
+                end 
+            end 
+        end 
+    end 
+    
+    return true -- all convex meshes are valid 
 end 
 
 function ENT:Mercury_FindParentEntity(mode) 
@@ -238,7 +267,6 @@ function ENT:InitModel()
 	end 
 	--]] 
 	meshindex = GetProperIndex(meshindex) 
-	-- meshindex = self:Mercury_TranslateMeshIndex(meshindex) 
 	local modelname = BREED.Models[meshindex] 
 	if !modelname then MsgC(color_white,"Removed entity with meshindex "..BREED.Objects[self.ob_name].mesh.."\n") SafeRemoveEntity(self) return end 
 	local modelpath = Model("models/breed/"..BREED.Models[meshindex]) 
@@ -266,6 +294,8 @@ function ENT:Mercury_FixInputLimit(inputdata)
 	local newdata = table.Copy(inputdata) 
 	if newdata.minrot == "X" then newdata.minrot = 180 end 
 	if newdata.maxrot == "X" then newdata.maxrot = -180 end 
+	
+	-- inverse mins and maxs 
 	return newdata 
 end 
 
@@ -606,25 +636,6 @@ function ENT:Mercury_ForceAngleToJoint()
 	self:SetAngles(self.Mercury_entJoint:GetAngles()) 
 end 
 
-function ENT:GetCollisionMeshTxt() 
-	if self.ob_name == "DROPSHIP" then return "142dpcollision.mdl.txt" end 
-	local collision_mesh = BREED.Objects[self.ob_name].collision 
-	local modelname = nil 
-	--[[ 
-	if collision_mesh != "0" then 
-		collision_mesh = GetProperIndex(collision_mesh) 
-		modelname = BREED.Models[collision_mesh] 
-		if modelname then 
-			modelname = modelname..".txt" 
-		end 
-	else 
-	--]] 
-		modelname = self:GetModel() 
-		modelname = string.GetFileFromFilename(modelname)..".txt" 
-	-- end 
-	return modelname 
-end 
-
 function ENT:InitMoveType_MultiConvexVehicle() 
 	MsgC(color_white,self.ob_name.." will be multiconvex physics vehicle.\n") 
 	
@@ -750,9 +761,16 @@ end
 function ENT:InitMoveType_Static() 
 	MsgC(color_white,self.ob_name.." will be physics from mesh entity.\n") 
 	
+	local meshindex = self:Mercury_TranslateMeshIndex(BREED.Objects[self:GetOBName()].mesh) -- collision mesh replacement 
+	meshindex = GetProperIndex(meshindex) 
+	-- meshindex = self:Mercury_TranslateMeshIndex(meshindex) 
+	local modelname = BREED.Models[meshindex] 
+	local modelpath = self:GetModel() 
+	if modelname then modelpath = Model("models/breed/"..BREED.Models[meshindex]) end 
+	
 	self.breed_collisionmesh = {} 
 	self.breed_collisionmesh.verticies = { } 
-	for k,v in pairs(util.GetModelMeshes(self:GetModel())) do 
+	for k,v in pairs(util.GetModelMeshes(modelpath)) do 
 		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
 	end 
 	
@@ -1015,9 +1033,15 @@ function ENT:Think()
 		
 		local seat = self:GetControllerSeat() 
 		if IsValid(seat) then 
+			if SERVER then 
+				local viewEntity = self:Mercury_FindViewPointEnt() 
+				-- MsgC(color_white,"viewEntity is: "..tostring(viewEntity).." ".. viewEntity:GetOBName().." \n") 
+				-- if IsValid(viewEntity) then driver:SetViewEntity(viewEntity) end 
+				if IsValid(viewEntity) then seat:SetNW2Entity("Mercury_entView",viewEntity) end 
+			end 
 			local driver = seat:GetDriver() 
 			if IsValid(driver) then 
-				
+				seat.Mercury_Driver = driver 
 				local viewEntity = seat:GetNW2Entity("Mercury_entView") 
 				-- print(viewEntity:GetOBName()) 
 				-- print(viewEntity:GetAngles()) 
@@ -1029,7 +1053,8 @@ function ENT:Think()
 				-- if SERVER then driver:SetEyeAngles(viewAngles) end 
 				if !seat.RenderOverride then 
 					seat.RenderOverride = function() 
-						local velocity = viewEntity:GetVelocity()*(FrameTime()*2) 
+						local velocity = viewEntity:GetVelocity()*(FrameTime()) 
+						-- velocity = vector_origin 
 						local viewPos = BREED.ViewPointSettings[viewEntity:GetOBName()] 
 						viewPos = viewPos and viewEntity:LocalToWorld(viewPos*scalar) or viewEntity:WorldSpaceCenter() 
 						-- print(viewPos) 
@@ -1049,6 +1074,13 @@ function ENT:Think()
 					self:SetThrustRate(self:GetThrustRate()-0.5) 
 				end 
 				-- print("THROTTLE:",self:GetThrustRate()) 
+			else 
+				if seat.Mercury_Driver then 
+					if IsValid(seat.Mercury_Driver) then 
+						self:Mercury_VehicleExit(seat.Mercury_Driver,seat) 
+					end 
+					seat.Mercury_Driver = nil 
+				end 
 			end 
 		end 
 		
@@ -1121,22 +1153,37 @@ end
 -- input: self 
 -- output: 1- Entity: Object to use as viewpoint. 2- Entity OBJECT Name. 
 function ENT:Mercury_FindViewPointEnt() 
-	local newEnt = self:Mercury_FindParentEntity("NEW") -- our main entity we're connected to 
+	if BREED.Objects[self:GetOBName()].camera == "1" then return self end  -- first, assess ourselves 
+	if self.tblsubents and !table.IsEmpty(self.tblsubents) then 
+		for k,v in pairs(self.tblsubents) do -- then, our sub entities. those that are connected to us 
+			if BREED.Objects[v:GetOBName()].camera == "1" then return v end 
+		end 
+	end 
+	local newEnt = self:Mercury_FindParentEntity("NEW") -- then, our branch entity we're connected to 
 	if !IsValid(newEnt) then newEnt = self:GetOwner() end 
 	if !IsValid(newEnt) then newEnt = self end 
-	if BREED.Objects[newEnt:GetOBName()].camera == "1" then return newEnt,newEnt:GetOBName() end 
-	for k,v in pairs(newEnt.tblsubents) do 
-		if BREED.Objects[v:GetOBName()].camera == "1" then return v,v:GetOBName() end 
+	if BREED.Objects[newEnt:GetOBName()].camera == "1" then return newEnt end 
+	if newEnt.tblsubents and !table.IsEmpty(newEnt.tblsubents) then 
+		for k,v in pairs(newEnt.tblsubents) do 
+			if BREED.Objects[v:GetOBName()].camera == "1" then return v end 
+		end 
 	end 
 end 
 
 function ENT:Mercury_VehicleEnter(ply,seat) 
 	-- emit starting sound 
-	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  
+	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  -- FIXME: Either "NEW" Entity or "Owner" Entity 
 	local sndIndex = BREED.ObjectSounds[mainEnt:GetOBName()] 
 	sndIndex = sndIndex and sndIndex.start or 0 
 	self:EmitSound("BREED."..sndIndex) 
 	
+end 
+
+function ENT:Mercury_VehicleExit(ply,seat) 
+	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  -- FIXME: Either "NEW" Entity or "Owner" Entity 
+	local sndIndex = BREED.ObjectSounds[mainEnt:GetOBName()] 
+	sndIndex = sndIndex and sndIndex.endsound or 0 
+	self:EmitSound("BREED."..sndIndex) 
 end 
 
 function ENT:PhysicsSimulate( phys, deltatime ) 
@@ -1159,11 +1206,29 @@ function ENT:PhysicsSimulate( phys, deltatime )
 		self:Mercury_ForceAngleToJoint() 
 	end 
 	
-	if BREED.Objects[self:GetOBName()].mode != "JET" then return SIM_NOTHING end
+	if BREED.Objects[self:GetOBName()].mode == "JET" then return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION end
+	if BREED.Objects[self:GetOBName()].mode == "WHEEL" then 
+		local wheelSettings = BREED.WheelSettings[self:GetOBName()] 
+		if wheelSettings and tonumber(wheelSettings.steered) > 0 then 
+			-- check whether wheel is touching the ground 
+			local ownerVehicle = self:GetOwner() 
+			if !IsValid(ownerVehicle) then return SIM_NOTHING end 
+			local ownerDriver = ownerVehicle:GetControllerSeat() 
+			if !IsValid(ownerDriver) then return SIM_NOTHING end 
+			ownerDriver = ownerDriver:GetDriver() 
+			if !IsValid(ownerDriver) then return SIM_NOTHING end 
+			if !phys:GetFrictionSnapshot() then return SIM_NOTHING end 
+			local scale = 5000 
+			if ownerDriver:KeyDown(IN_MOVELEFT) and ownerDriver:KeyDown(IN_MOVERIGHT) then return SIM_NOTHING 
+			elseif ownerDriver:KeyDown(IN_MOVELEFT) then return vector_origin, Vector(0,-scale,0), SIM_LOCAL_ACCELERATION 
+			elseif ownerDriver:KeyDown(IN_MOVERIGHT) then return vector_origin, Vector(0,scale,0), SIM_LOCAL_ACCELERATION 
+			end 
+		end 
+	end
 
 	-- jet propulsion, copied from Gmod Thrusters 
 	-- return self.ForceAngle, self.ForceLinear, SIM_LOCAL_ACCELERATION
-	return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION
+	return SIM_NOTHING 
 end
 
 function ENT:OnRemove() 

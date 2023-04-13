@@ -1,4 +1,4 @@
-AddCSLuaFile("entities/basemercuryobject.lua") 
+AddCSLuaFile() 
 
 include("autorun/breed_objects.lua") 
 
@@ -84,7 +84,7 @@ function ENT:SetupDataTables()
 	self:NetworkVar("Angle",0,"RotationAngle") 
 	self:NetworkVar("String",0,"OBName",{"KeyName","object"}) -- Allows the NetworkVar to be set using Entity:SetKeyValue. 
 	self:NetworkVar("String",1,"SubMode") 
-	self:NetworkVar("Entity",0,"SubEnt") 
+	self:NetworkVar("Entity",0,"SubEnt") -- rename to BranchEnt 
 	self:NetworkVar("Entity",1,"ControllerSeat") 
 	self:NetworkVar("Float",0,"ThrustRate") 
 	self:NetworkVar("Vector",0,"Offset") -- for thruster 
@@ -203,7 +203,16 @@ function ENT:Mercury_TranslateMeshIndex(meshindex) -- translates the mesh index 
 	return meshindex 
 end 
 
-function ENT:CheckEntityConvexity(entity) 
+function ENT:Mercury_GetRandomVertex() 
+	local mesh = BREED.GetModelMeshes(self:GetModel()) 
+	for _,submodel in RandomPairs(mesh) do 
+		for _,vertex in RandomPairs(submodel.verticies) do 
+			return vertex.pos 
+		end 
+	end 
+end 
+
+function ENT:Mercury_CheckEntityConvexity(entity) 
 	if !IsValid(entity) then entity = self end 
     local physObj = entity:GetPhysicsObject() 
     if !physObj:IsValid() then return end 
@@ -230,6 +239,80 @@ function ENT:CheckEntityConvexity(entity)
     
     return true -- all convex meshes are valid 
 end 
+
+local function rescaleVertices(vertices) -- fixed to rescale bounding radius to 1 
+    -- Find the bounding box of the vertices
+    local minPos = Vector(0, 0, 0)
+    local maxPos = Vector(0, 0, 0)
+    for _, vertex in ipairs(vertices) do
+        if vertex.x < minPos.x then minPos.x = vertex.x end
+        if vertex.y < minPos.y then minPos.y = vertex.y end
+        if vertex.z < minPos.z then minPos.z = vertex.z end
+        if vertex.x > maxPos.x then maxPos.x = vertex.x end
+        if vertex.y > maxPos.y then maxPos.y = vertex.y end
+        if vertex.z > maxPos.z then maxPos.z = vertex.z end
+    end
+
+    -- Calculate the center of the bounding box
+    local centerPos = (minPos + maxPos) / 2
+
+    -- Calculate the distance from the center to the furthest vertex
+    local maxDistance = 0
+    for _, vertex in ipairs(vertices) do
+        local distance = (vertex - centerPos):Length()
+        if distance > maxDistance then maxDistance = distance end
+    end
+
+    -- Rescale the vertices
+    local scale = 1 / maxDistance
+    for _, vertex in ipairs(vertices) do
+        vertex = (vertex - centerPos) * scale
+    end
+
+    -- Return the new, scaled table of vertices
+    return vertices
+end
+
+
+function ENT:Mercury_InitWheelPhysics(ent) 
+	ent = IsValid(ent) and ent or self 
+    -- Get the reference physics mesh 
+    local referencePhys = BREED.GetModelMeshes("models/props_vehicles/carparts_wheel01a.mdl")[1]["verticies"] 
+    
+    -- Get the vertices from the reference physics mesh
+    local vertices = {} 
+    for k, v in pairs(referencePhys) do 
+        table.insert(vertices, v.pos) 
+    end 
+    
+    -- Get the bounding radius of the input entity
+    local boundingRadius = ent:BoundingRadius() 
+	print("boundingRadius:",boundingRadius) 
+    
+    -- Define the scaling factor
+    local scaleFactor = boundingRadius / 20 
+	
+	vertices = rescaleVertices(vertices) -- scales bounding radius to 1 
+    
+    -- Rescale the vertices in the table 
+    for k, v in pairs(vertices) do 
+        vertices[k] = v * scaleFactor 
+    end 
+    
+    -- Apply the new physics mesh to the input entity 
+	ent:PhysicsInitConvex(vertices) 
+    local physObj = ent:GetPhysicsObject() 
+    if IsValid(physObj) then 
+        -- physObj:EnableMotion(false) 
+        -- physObj:SetMaterial("metal") 
+        -- physObj:SetMass(1000) 
+        -- physObj:SetMesh(vertices) 
+        physObj:EnableMotion(true) 
+        ent:SetSolid(SOLID_BBOX) 
+        ent:SetMoveType(MOVETYPE_VPHYSICS) 
+    end 
+end 
+
 
 function ENT:Mercury_FindParentEntity(mode) 
 	local resultEnt = NULL 
@@ -642,7 +725,7 @@ function ENT:InitMoveType_MultiConvexVehicle()
 	self.breed_collisionmesh = {} 
 	self.breed_collisionmesh.verticies = { } 
 	local model = self:GetModel() 
-	for k,v in pairs(util.GetModelMeshes(model)) do 
+	for k,v in pairs(BREED.GetModelMeshes(model)) do 
 		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
 	end 
 	
@@ -770,7 +853,7 @@ function ENT:InitMoveType_Static()
 	
 	self.breed_collisionmesh = {} 
 	self.breed_collisionmesh.verticies = { } 
-	for k,v in pairs(util.GetModelMeshes(modelpath)) do 
+	for k,v in pairs(BREED.GetModelMeshes(modelpath)) do 
 		table.Add(self.breed_collisionmesh.verticies,v.verticies) 
 	end 
 	
@@ -804,7 +887,8 @@ function ENT:InitMoveType()
 		local scalar = BREED.WheelSettings[self:GetOBName()] 
 		scalar = scalar and scalar.radius 
 		scalar = scalar and scalar != "0" and tonumber(scalar) or 1 
-		self:PhysicsInitSphere(self:BoundingRadius()*scalar) 
+		-- self:PhysicsInitSphere(self:BoundingRadius()*scalar) 
+		self:Mercury_InitWheelPhysics() 
 	elseif col_type == "POLY" then 
 		if IsValid(self:InitMoveType_Static()) then 
 			self:GetPhysicsObject():EnableMotion(true) 
@@ -1051,7 +1135,7 @@ function ENT:Think()
 				-- viewAngles.z = -viewAngles.z 
 				
 				-- if SERVER then driver:SetEyeAngles(viewAngles) end 
-				if !seat.RenderOverride then 
+				-- if !seat.RenderOverride then 
 					seat.RenderOverride = function() 
 						local velocity = viewEntity:GetVelocity()*(FrameTime()) 
 						-- velocity = vector_origin 
@@ -1063,7 +1147,7 @@ function ENT:Think()
 						-- seat:SetRenderAngles(viewEntity:GetAngles()+Angle(0,180,0)) 
 						-- LocalPlayer():SetEyeAngles(self:GetAngles()) 
 					end 
-				end 
+				-- end 
 				-- if seat.SetRenderOrigin and IsValid(viewEntity) then seat:SetRenderOrigin(viewEntity:GetPos()) end 
 				
 				if driver:KeyDown(IN_FORWARD) and self:GetThrustRate() < 100 then 
@@ -1090,7 +1174,7 @@ function ENT:Think()
 		self:Mercury_JetThink() 
 		
 	elseif BREED.Objects[self:GetOBName()].mode == "WHEEL" and self:GetPhysicsObject():IsValid() and IsValid(self:GetOwner()) and self:GetOwner():GetThrustRate() != 0 and BREED.WheelSettings[self:GetOBName()] and tonumber(BREED.WheelSettings[self:GetOBName()].rotate) > 0 then -- a wheel 
-		self:Mercury_WheelThink() 
+		-- self:Mercury_WheelThink() 
 	end 
 	
 	if self:Mercury_CanRotate() then -- except wheels 
@@ -1172,10 +1256,23 @@ end
 
 function ENT:Mercury_VehicleEnter(ply,seat) 
 	-- emit starting sound 
-	local mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  -- FIXME: Either "NEW" Entity or "Owner" Entity 
+	local mainEnt = self:Mercury_FindParentEntity("NEW") 
+	mainEnt = IsValid(mainEnt) and mainEnt or self:GetOwner() 
+	mainEnt = IsValid(mainEnt) and mainEnt or self 
+	-- mainEnt = IsValid(self:GetOwner()) and self:GetOwner() or self  -- FIXME: Either "NEW" Entity or "Owner" Entity 
 	local sndIndex = BREED.ObjectSounds[mainEnt:GetOBName()] 
 	sndIndex = sndIndex and sndIndex.start or 0 
 	self:EmitSound("BREED."..sndIndex) 
+	
+	-- give player weapons mounted on the vehicle 
+	-- local weapon = ply:Give("basemercuryweapon") 
+	
+	-- get all sub entities with a gun 
+	-- make sure all sub entities are connected to the "NEW" entity 
+	-- with a "SUB" spawn parameter 
+	-- include weapons on self entity 
+	-- do not check weapons on "NEW" or "AUTO" 
+	-- local weapons = BREED.AmmoSettings[]
 	
 end 
 
@@ -1184,6 +1281,27 @@ function ENT:Mercury_VehicleExit(ply,seat)
 	local sndIndex = BREED.ObjectSounds[mainEnt:GetOBName()] 
 	sndIndex = sndIndex and sndIndex.endsound or 0 
 	self:EmitSound("BREED."..sndIndex) 
+	
+	ply:SetAllowWeaponsInVehicle(false) 
+end 
+
+function ENT:MercuryWheel_GetSteerForce(phys,deltatime) 
+	local wheelSettings = BREED.WheelSettings[self:GetOBName()] 
+	if wheelSettings and tonumber(wheelSettings.steered) > 0 then 
+		-- check whether wheel is touching the ground 
+		local ownerVehicle = self:GetOwner() 
+		if !IsValid(ownerVehicle) then return vector_origin end 
+		local ownerDriver = ownerVehicle:GetControllerSeat() 
+		if !IsValid(ownerDriver) then return vector_origin end 
+		ownerDriver = ownerDriver:GetDriver() 
+		if !IsValid(ownerDriver) then return vector_origin end 
+		if !phys:GetFrictionSnapshot() then return vector_origin end 
+		local scale = 5000 
+		if ownerDriver:KeyDown(IN_MOVELEFT) and ownerDriver:KeyDown(IN_MOVERIGHT) then return vector_origin 
+			elseif ownerDriver:KeyDown(IN_MOVELEFT) then return Vector(0,-scale,0) 
+			elseif ownerDriver:KeyDown(IN_MOVERIGHT) then return Vector(0,scale,0) 
+		end 
+	end 
 end 
 
 function ENT:PhysicsSimulate( phys, deltatime ) 
@@ -1208,21 +1326,29 @@ function ENT:PhysicsSimulate( phys, deltatime )
 	
 	if BREED.Objects[self:GetOBName()].mode == "JET" then return Vector(0,0,0), self.ForceLinear, SIM_LOCAL_ACCELERATION end
 	if BREED.Objects[self:GetOBName()].mode == "WHEEL" then 
+		-- PrintTable(phys:GetFrictionSnapshot()) 
+		-- print("stress:",phys:GetStress()) 
 		local wheelSettings = BREED.WheelSettings[self:GetOBName()] 
-		if wheelSettings and tonumber(wheelSettings.steered) > 0 then 
-			-- check whether wheel is touching the ground 
-			local ownerVehicle = self:GetOwner() 
-			if !IsValid(ownerVehicle) then return SIM_NOTHING end 
-			local ownerDriver = ownerVehicle:GetControllerSeat() 
-			if !IsValid(ownerDriver) then return SIM_NOTHING end 
-			ownerDriver = ownerDriver:GetDriver() 
-			if !IsValid(ownerDriver) then return SIM_NOTHING end 
-			if !phys:GetFrictionSnapshot() then return SIM_NOTHING end 
-			local scale = 5000 
-			if ownerDriver:KeyDown(IN_MOVELEFT) and ownerDriver:KeyDown(IN_MOVERIGHT) then return SIM_NOTHING 
-			elseif ownerDriver:KeyDown(IN_MOVELEFT) then return vector_origin, Vector(0,-scale,0), SIM_LOCAL_ACCELERATION 
-			elseif ownerDriver:KeyDown(IN_MOVERIGHT) then return vector_origin, Vector(0,scale,0), SIM_LOCAL_ACCELERATION 
+		local torque = 0 
+		local steer = self:MercuryWheel_GetSteerForce(phys,deltatime) 
+		if wheelSettings then 
+			local maxvel = BREED.Objects[self:GetOwner():GetOBName()].maxvel 
+	-- Make the wheel spin
+			local impulse = self:GetOwner():GetRight() -- Direction of the impulse force 
+			local force = maxvel*self:GetOwner():GetThrustRate() -- Magnitude of the force 
+			torque = force 
+			
+			local position = self:GetPhysicsObject():GetPos() -- Position to apply the force 
+			local torque,torquelocal = self:GetPhysicsObject():CalculateForceOffset(impulse * force, position) 
+			
+			local shouldLimit = phys:GetAngleVelocity():Length() > force 
+			if !shouldLimit then 
+				phys:ApplyTorqueCenter(torque) 
 			end 
+			
+			
+			print(torque:Length(),phys:GetAngleVelocity():Length(),phys:GetDamping()) 
+			return Vector(0,0,0), steer, SIM_LOCAL_ACCELERATION 
 		end 
 	end
 
@@ -1254,6 +1380,7 @@ function ENT:Use(activator,caller,useType,value)
 
 	if IsValid(closestEnt) then 
 		-- print(closestEnt) 
+		activator:SetAllowWeaponsInVehicle(true) 
 		closestEnt:Fire("entervehicle","",0,activator,activator) 
 		closestEnt:GetNW2Entity("Mercury_entParent"):Mercury_VehicleEnter(activator,closestEnt) 
 	end 

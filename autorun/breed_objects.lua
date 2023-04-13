@@ -33,7 +33,9 @@ BREED.MapIconSettings			=	{}
 BREED.MuzzleSettings			=	{} 
 BREED.PanelSettings				=	{} 
 BREED.PilotSettings				=	{} 
+BREED.ObjectSmokeTrails			=	{} 
 BREED.ObjectSounds				=	{} 
+BREED.ObjectTrails				=	{} 
 BREED.SpriteSettings			=	{} 
 BREED.Squad_Follow				=	{} 
 BREED.States					=	{} 
@@ -41,7 +43,10 @@ BREED.Subob						=	{}
 BREED.Switches					=	{} 
 BREED.Tag_Generate				=	{} 
 BREED.ViewPointSettings			=	{} 
+BREED.WeaponCartridgeSettings	=	{} 
+BREED.Weapons					=	{} 
 BREED.Weapon_Name				=	{} 
+BREED.WeaponGroupName			=	{} 
 BREED.WeaponSounds				=	{} 
 BREED.WheelSettings				=	{} 
 
@@ -522,6 +527,10 @@ local function process_mercury_objcmd(tbl)
 		DefineSwitches(tbl) 
 	elseif tbl[1] == "#TAG_GENERATE" then 
 		DefineTag(tbl) 
+	elseif tbl[1] == "#TRAIL" then 
+		DefineObjectTrail(tbl) 
+	elseif tbl[1] == "#SMOKE_TRAIL" then 
+		DefineObjectSmokeTrail(tbl) 
 	elseif tbl[1] == "#VPOINT" then 
 		DefineViewPointSettings(tbl) 
 	elseif tbl[1] == "#WEAPON_NAME" then 
@@ -621,6 +630,116 @@ local function process_mercury_soundfile(tbl) -- completed
 		DefineWeaponSound(tbl) 
 	elseif tbl[1] == "#OBJECT_HIT" or tbl[1] == "#WEAPON_HIT" then 
 		DefineHitSound(tbl) 
+	elseif tbl[1] == "#REM" then 
+	-- else MsgC(color_white,"Unknown command:"..tbl[1].."\n") 
+	end 
+end 
+
+local function DefineWeaponGroupName(obj) 
+	-- #REM WEAPON_GROUP_NAME	INDEX	FACTION..	NAME 
+	-- #WEAPON_GROUP_NAME		0	0	wg 0 
+	-- #WEAPON_GROUP_NAME		1	0	Rocket_guided 
+	local index = obj[2] 
+	index = tonumber(index)+1 
+	BREED.WeaponGroupName[index]				=	{} 
+	BREED.WeaponGroupName[index].faction		=	obj[3] 
+	BREED.WeaponGroupName[index].name			=	obj[4]  
+end 
+
+local function DefineObjectTrail(obj) -- usable both for OBJECT and WEAPON 
+	-- #REM	TRAIL	WEAPON	TEXTURE	COLOR	POSITION	WIDTH 
+	-- #TRAIL	breed_long_rangea	65	ffff00	0	0	0	20	
+	local object = string.upper(obj[2]) -- breed_long_rangea 
+	BREED.ObjectTrails[object]						=	{ } 
+	BREED.ObjectTrails[object].texindex				=	obj[3] -- 65 
+	BREED.ObjectTrails[object].color				=	hexcolortocolor_255(obj[4])  -- ffff00 
+	local posx,posy,posz = convert_vector(obj[5],obj[6],obj[7]) 
+	BREED.ObjectTrails[object].position				=	Vector(posx,posy,posz) -- 0 0 0 
+	BREED.ObjectTrails[object].width				=	obj[8] -- 20 
+	
+end 
+
+local function DefineObjectSmokeTrail(obj) -- usable both for OBJECT and WEAPON 
+-- #REM	SMOKE_TRAIL	WEAPON	RADIUS	COLOR	LIFE (seconds)	
+-- #rem	#SMOKE_TRAIL	rocket_guided	1	004080	1	
+	local object = string.upper(obj[2]) -- rocket_guided 
+	BREED.ObjectSmokeTrails[object]						=	{ } 
+	BREED.ObjectSmokeTrails[object].radius				=	obj[3] -- 65 
+	BREED.ObjectSmokeTrails[object].color				=	hexcolortocolor_255(obj[4])  -- ffff00 
+	BREED.ObjectSmokeTrails[object].life				=	obj[5] 
+	
+end 
+
+local function DefineWeaponCartridge(obj) 
+	-- #REM	CARTRIDGE	WEAPON	LIFE	SOUND	TEXTURE	MESH	COLOR	RADIUS	POSITION	VELOCITY	
+	
+	-- #CARTRIDGE	scout_minigun	32	0	0	105	ffffffff	10	120	-40	-20	50	150	-75
+	local weapon = string.upper(obj[2]) -- scout_minigun 
+	BREED.WeaponCartridgeSettings[weapon]				=	{ } 
+	BREED.WeaponCartridgeSettings[weapon].life			=	obj[3] -- 32 
+	BREED.WeaponCartridgeSettings[weapon].sound			=	obj[4]  -- 0 
+	BREED.WeaponCartridgeSettings[weapon].texture		=	obj[5]  -- 0 
+	BREED.WeaponCartridgeSettings[weapon].mesh			=	obj[6]  -- 105 
+	BREED.WeaponCartridgeSettings[weapon].color			=	hexcolortocolor_255(obj[7])  -- ffffffff 
+	BREED.WeaponCartridgeSettings[weapon].radius		=	obj[8]  -- 10 
+	local posx,posy,posz = convert_vector(obj[9],obj[10],obj[11]) 
+	BREED.WeaponCartridgeSettings[weapon].position		=	Vector(posx,posy,posz)  -- 120 - 40 -20 
+	posx,posy,posz = convert_vector(obj[12],obj[13],obj[14]) 
+	BREED.WeaponCartridgeSettings[weapon].velocity		=	Vector(posx,posy,posz)  -- -50 150 -75 
+end 
+
+local function DefineWeapons(obj) 
+	-- #REM	NAME	GROUP INDEX	TYPE	DISPLAY	ICON	MSH/SPT	SPRT RADIUS	SPRITE COL	MZL FLARE	MZL SPRITE	MZL SPRTRAD	MZL SPRTCOL	DAMAGE	+SPEED	ACCEL	BURN	LIFE	FRATE	BURST	RELOAD	SEEK	FUSED	BOUNCE	GRAVITY	EXPTYPE	EXPSIZE	COLRADIUS	MASS	MULTI SHELL	JITTER	PENETRATE VAL	AUTO RELOAD	TURN RATE
+-- #WPN	dummy_weaponAmmo	0	KINETIC	MESH	-1	615	0	0	598	67	1	80ffff	1	50	0	1	2	1	1	0	0	0	0	0	2	1	0.1	0.001	1	2	55	1	0
+	local weapon = obj[2] 
+	BREED.Weapons[weapon]						=	{} 
+	BREED.Weapons[weapon].group_index			=	tonumber(obj[3])+1 -- 0 
+	BREED.Weapons[weapon].projtype				=	obj[4] -- KINETIC (either KINETIC or EXPLOSIVE) 
+	BREED.Weapons[weapon].displaytype			=	obj[5] -- MESH (either MESH, SPRITE or NONE. defines whether to use mesh / sprite) 
+	BREED.Weapons[weapon].icon					=	obj[6] -- -1 (icon to use when selected) 
+	BREED.Weapons[weapon].rendermodel			=	obj[7] -- 615 (model or material index) 
+	BREED.Weapons[weapon].sprite_radius			=	obj[8] -- 0 
+	BREED.Weapons[weapon].sprite_color			=	hexcolortocolor_255(obj[9])  -- 0 
+	BREED.Weapons[weapon].mzl_flare				=	obj[10] -- 598 
+	BREED.Weapons[weapon].mzl_sprite			=	obj[11] -- 67 
+	BREED.Weapons[weapon].mzl_sprite_radius		=	obj[12] -- 1 
+	BREED.Weapons[weapon].mzl_sprite_color		=	hexcolortocolor_255(obj[13])  -- 80ffff 
+	BREED.Weapons[weapon].damage				=	obj[14] -- 1 
+	BREED.Weapons[weapon].speed					=	obj[15] -- 50 
+	BREED.Weapons[weapon].accel					=	obj[16] -- 0 
+	BREED.Weapons[weapon].burn					=	obj[17] -- 1 
+	BREED.Weapons[weapon].life					=	obj[18] -- 2 
+	BREED.Weapons[weapon].firerate				=	obj[19] -- 1 
+	BREED.Weapons[weapon].burst					=	obj[20] -- 1 
+	BREED.Weapons[weapon].reload				=	obj[21] -- 0 
+	BREED.Weapons[weapon].seeking				=	obj[22] -- 0 
+	BREED.Weapons[weapon].fused					=	obj[23] -- 0 
+	BREED.Weapons[weapon].bounce				=	obj[24] -- 0 
+	BREED.Weapons[weapon].gravity				=	obj[25] -- 0 
+	BREED.Weapons[weapon].exptype				=	obj[26] -- 2 
+	BREED.Weapons[weapon].expsize				=	obj[27] -- 1 
+	BREED.Weapons[weapon].colradius				=	obj[28] -- 0.1 (collision radius of projectile) 
+	BREED.Weapons[weapon].mass					=	obj[29] -- 0.001 
+	BREED.Weapons[weapon].multi_shell			=	obj[30] -- 1 
+	BREED.Weapons[weapon].jitter				=	obj[31] -- 2 
+	BREED.Weapons[weapon].penetrate_val			=	obj[32] -- 55 
+	BREED.Weapons[weapon].auto_reload			=	obj[33] -- 1 
+	BREED.Weapons[weapon].turn_rate				=	obj[34] -- 0 
+end 
+
+local function process_mercury_weaponsfile(tbl) -- completed 
+	if tbl[1] == "#WEAPON_GROUP_NAME" then 
+		DefineWeaponGroupName(tbl) 
+	elseif tbl[1] == "#WPN" then 
+		DefineWeapons(tbl) 
+	elseif tbl[1] == "#TRAIL" then 
+		DefineObjectTrail(tbl) 
+	elseif tbl[1] == "#SMOKE_TRAIL" then 
+		DefineObjectSmokeTrail(tbl) 
+	elseif tbl[1] == "#CARTRIDGE" then 
+		DefineWeaponCartridge(tbl) 
+	elseif tbl[1] == "#WEAPON_IMPACT" then 
+		
 	elseif tbl[1] == "#REM" then 
 	-- else MsgC(color_white,"Unknown command:"..tbl[1].."\n") 
 	end 
@@ -743,6 +862,20 @@ local function readmeshadjustmentfile(filename)
 	curfile:Close() 
 end 
 
+local function readweapons(filename) 
+	MsgC(color_white,"Loading Weapons from "..filename.."\n") 
+	local curfile = nil 
+	curfile = file.Open(filename,"r","GAME")  
+	while !curfile:EndOfFile() do -- loop: work until we reach the end of file 
+		local curstring = curfile:ReadLine() -- read next line 
+		local tableofstrings = string.Explode("%s",curstring,true) -- seperate given line to a table 
+		-- while #tableofstrings[1] == 0 do table.remove(tableofstrings,1) end -- skip empty lines 
+		if #tableofstrings[1] == 0 then table.remove(tableofstrings,1) end 
+		process_mercury_weaponsfile(tableofstrings) 
+	end 
+	curfile:Close() 
+end 
+
 local function readbreedobjectfiles() -- read all file in lua/objects and create tasks according to given function name 
 	MsgC(color_white,"Loading Scripts\n") 
 	if BREED and BREED.Objects and !table.IsEmpty(BREED.Objects) then MsgC(Color(255,0,0),"Scripting: Tried to load objects while we already have obs defined! Halting. \n") return end 
@@ -861,6 +994,29 @@ local function DefineModelMeshes() -- this is for PhysicsInitMultiConvex or Phys
 	end 
 end 
 
+-- BREED.GetModelMeshes 
+-- Purpose: Check whether the model mesh for the given model path is cached 
+-- If not, cache it and return it 
+-- If yes, return the cached model mesh 
+-- Input: modelname 
+-- Output: model data 
+local function GetModelMeshes(model,lod,bodygroupMask) 
+	local cachedModelMeshes = BREED.Cache_ModelMeshes[model] -- retrieve model data from cached table. 
+	if cachedModelMeshes then 
+		return cachedModelMeshes 
+	end 
+  
+	-- If the model mesh is not cached, get it and cache it 
+	local modelMeshes = util.GetModelMeshes(model) -- retrieves non cached model data. very slow. 
+	BREED.Cache_ModelMeshes[model] = modelMeshes 
+  
+	-- Call the function again to return the cached model mesh 
+	return GetModelMeshes(model) 
+end 
+
+BREED.Cache_ModelMeshes	=	 { } 
+BREED.GetModelMeshes = GetModelMeshes 
+
 BREED.DefineModelMeshes = DefineModelMeshes 
 BREED.FileTable_ReIndex = filetable_reindex 
 BREED.HexColorToColor255 = hexcolortocolor_255 
@@ -873,6 +1029,7 @@ MsgC(color_white,"Loading Sounds...\n")
 BREED.Sounds = filetable_reindex(file.Find(soundPath.."/*.wav","GAME")) 
 readsoundsfile("lua/misc/Sounds.txt") 
 readmeshadjustmentfile("lua/misc/MeshHelp.txt") 
+readweapons("lua/misc/Weapons.txt")
 BREED.CreateTriangleDataAndSave = CreateTriangleDataAndSave 
 BREED.CreateTriangleDataFromSingleMesh = CreateTriangleDataFromSingleMesh 
 readbreedobjectfiles() 
